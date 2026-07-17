@@ -20,6 +20,7 @@ The Deep Hough Transform (DHT) embeds classical Hough voting inside a convolutio
 \end{abstract}
 
 \section{Introduction}
+\label{sec:intro}
 Detecting global geometric structure from local evidence is one of the oldest problems in computer vision. The Hough transform \citep{hough1962,duda1972} solves it for straight lines by letting every edge pixel vote for all lines passing through it; peaks in the $(\theta, r)$ parameter space reveal lines that many pixels jointly support. The recent Deep Hough Transform (DHT) \citep{zhao2021deep} modernized this idea: instead of voting edge pixels, it aggregates learned CNN features along every candidate line into the parametric domain, detects peaks there with lightweight convolutions, and trains the whole pipeline end to end. The result is accurate, context-aware, real-time semantic line detection.
 
 The success of DHT invites an obvious question with a non-obvious answer: why only lines? Classical Hough theory has been extended over four decades to circles, ellipses, and families of algebraic curves \citep{ballard1981,torrente2014}, with applications including the extraction of anatomical profiles such as vertebrae boundaries from CT slices \citep{torrente2014}. Yet the deep, feature-space formulation has remained confined to straight lines \citep{zhao2021deep,lin2020houghpriors,houglanenet2023}. The obstacle is structural. A line needs two parameters, so its accumulator is a manageable 2D map. A circle or a vertex-form parabola needs three, an ellipse five, and a cubic Bezier eight; a dense accumulator over $d$ parameters with $B$ bins per axis costs $O(B^{d})$ memory and $O(B^{d} \cdot S)$ aggregation work for $S$ samples per curve. At useful resolutions this is prohibitive beyond $d = 2$, and it explains why deep curve detectors abandoned voting altogether in favor of direct parameter regression \citep{polylanenet2020,lstr2021,feng2022bezier}.
@@ -82,13 +83,55 @@ followed by a 1D conv head and peak selection, yielding full detections $(\hat{\
 For a curve family with parameter vector $\mathbf{p} \in \mathbb{R}^{d}$ factored as $(\mathbf{a}, \mathbf{s})$ with $\mathbf{a} \in \mathbb{R}^{d_1}$, $\mathbf{s} \in \mathbb{R}^{d_2}$, $d_1 + d_2 = d$, and $B$ quantization bins per axis, the dense accumulator of Equation~\ref{eq:vote} occupies $O(B^{d})$ entries. The cascade of Sections~3.3--3.4 occupies $O(B^{d_1} + k B^{d_2})$ entries, where $k$ is the number of anchor peaks retained. \emph{Proof.} Stage 1 (Eq.~\ref{eq:stage1}) accumulates over $\mathbf{a}$ only, marginalizing $\mathbf{s}$ over a fixed probe set $\tilde{\mathcal{S}}$ of size $m$ independent of $B$, giving a $B^{d_1}$-sized tensor. Stage 2 (Eq.~\ref{eq:stage2}) is instantiated only at the $k$ retained peaks, each contributing a $B^{d_2}$-sized tensor, giving $k B^{d_2}$ total. Summing the two stages gives the stated bound. $\blacksquare$
 \end{proposition}
 
-For our parabola and circle families, $d_1 = 2$ (anchor) and $d_2 = 1$ (shape), so the cascade is $O(B^{2} + kB)$ against a dense $O(B^{3})$; Table~\ref{tab:memory_complexity} reports the measured ratio.
+For our parabola and circle families, $d_1 = 2$ (anchor) and $d_2 = 1$ (shape), so the cascade is $O(B^{2} + kB)$ against a dense $O(B^{3})$; Table~\ref{tab:memory_complexity} reports the measured accumulator sizes at our actual training configuration ($C=32$ channels, $B_a=32$ anchor bins, $B_s=48$ dense shape bins, $k=4$ retained peaks), against a dense accumulator using the same 32 bins per axis for $d=3$.
+
+\begin{table}[htbp]
+\centering
+\caption{Measured accumulator memory (float32), dense vs.\ factorized, at the configuration used for all main-text results ($C=32$, $B=32$ bins/axis, $d=3$).}
+\label{tab:memory_complexity}
+\small
+\begin{tabular}{lrr}
+\toprule
+\textbf{Accumulator} & \textbf{Elements} & \textbf{Memory} \\
+\midrule
+Dense $O(B^{d})$              & 1{,}048{,}576 & 4.00 MB \\
+Stage 1 $O(B_a^{2})$          & 32{,}768     & 128.00 KB \\
+Stage 2 $O(k B_s)$            & 6{,}144      & 24.00 KB \\
+\midrule
+\textbf{Factorized total}     & \textbf{38{,}912} & \textbf{152.00 KB} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The factorized cascade uses 26.9$\times$ less memory than the dense accumulator at $d=3$; by Proposition~1 this ratio grows with $d$, since the dense term scales as $B^{d}$ while the factorized term stays $O(B^{d_1} + kB^{d_2})$ for any fixed anchor dimensionality $d_1$.
 
 \begin{proposition}[Permutation invariance of voting]
 The voting operator $\mathbf{Y}(\mathbf{p}) = |\Omega(\mathbf{p})|^{-1} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i)$ is invariant to any permutation of the pixel indices within $\Omega(\mathbf{p})$. \emph{Proof.} Summation and the cardinality-normalizing constant are both invariant to the order in which elements of a finite index set are enumerated; $\Omega(\mathbf{p})$ is a set, so Equation~\ref{eq:vote} depends only on the multiset of feature values $\{\mathbf{X}(i) : i \in \Omega(\mathbf{p})\}$, not their traversal order. $\blacksquare$
 \end{proposition}
 
 This property is what allows the gather-and-mean implementation (a fixed index bank per candidate curve) to be computed with no ordering assumptions and no positional encoding, unlike a learned-attention alternative over the same support.
+
+Algorithm~\ref{alg:cascade} summarizes training-time inference for one image; index banks $\Omega(\cdot)$ are precomputed once per family and resolution and reused across all images.
+
+\begin{algorithm}
+\caption{Factorized deep Hough cascade (inference)}
+\label{alg:cascade}
+\begin{algorithmic}[1]
+\State $\mathbf{X} \gets \text{Encoder}(\text{image})$ \Comment{$C \times H \times W$ deep features}
+\For{each anchor bin $\mathbf{a}$}
+  \State $\mathbf{Y}_1(\mathbf{a}) \gets \operatorname{logsumexp}_{\mathbf{s} \in \tilde{\mathcal{S}}} \; \text{mean}_{i \in \Omega(\mathbf{a},\mathbf{s})} \mathbf{X}(i)$ \Comment{Stage 1: marginal anchor voting, Eq.~\ref{eq:stage1}}
+\EndFor
+\State $\mathbf{P}_1 \gets \text{ConvHead}_1(\mathbf{Y}_1)$; \quad $\{\hat{\mathbf{a}}_1, \ldots, \hat{\mathbf{a}}_k\} \gets \text{TopK-NMS}(\mathbf{P}_1)$
+\For{each retained anchor $\hat{\mathbf{a}}_j$}
+  \For{each shape bin $\mathbf{s} \in \mathcal{S}_{\text{dense}}$}
+    \State $\mathbf{Y}_2^{(j)}(\mathbf{s}) \gets \text{mean}_{i \in \Omega(\hat{\mathbf{a}}_j, \mathbf{s})} \mathbf{X}(i)$ \Comment{Stage 2: conditional shape voting, Eq.~\ref{eq:stage2}}
+  \EndFor
+  \State $\mathbf{P}_2^{(j)} \gets \text{ConvHead}_2(\mathbf{Y}_2^{(j)})$; \quad $\hat{\mathbf{s}}_j \gets \text{SoftArgmaxPeak}(\mathbf{P}_2^{(j)})$
+  \State refine $(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j)$ by soft-argmax over the local neighborhood in $\mathbf{P}_1$, $\mathbf{P}_2^{(j)}$
+\EndFor
+\State \textbf{return} detections $\{(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j, \text{score}_j)\}_{j=1}^{k}$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Training}
 Following \citet{zhao2021deep}, ground-truth curves are mapped into each accumulator, smoothed with a Gaussian kernel, and each stage is trained with binary cross-entropy against its smoothed target: anchors in $\mathbf{Y}_1$, and, for stage 2, shape targets conditioned on ground-truth anchors (teacher forcing) plus detected anchors within a matching radius. The encoder, both conv heads, and the voting layers (which are parameter-free gather-and-mean operations) train end to end. % TODO: loss weights, schedule.
@@ -169,7 +212,27 @@ Second, and more informative, both learned baselines that lack an explicit geome
 
 \section{Discussion: voting as geometry-constrained attention}
 \label{sec:discussion}
-Equation~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathbf{p}$ attends to pixel tokens with a hard, non-learned attention map: weight $1 / |\Omega(\mathbf{p})|$ on pixels of $C(\mathbf{p})$ and zero elsewhere. A DETR decoder replaces this with learned similarity, gaining flexibility and losing the geometric prior; our experiments quantify the price of that trade in low-data, high-clutter regimes. This view suggests a spectrum: fixed geometric attention (this work), attention restricted to geometric supports but with learned per-pixel weights, and fully learned hypothesis embeddings that dispense with explicit parameterizations. The latter would extend voting beyond geometry, to structured hypothesis spaces such as graph motifs, which we leave to future work.
+Equation~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathbf{p}$ attends to pixel tokens with a hard, non-learned attention map: weight $1 / |\Omega(\mathbf{p})|$ on pixels of $C(\mathbf{p})$ and zero elsewhere. A DETR decoder replaces this with learned similarity, gaining flexibility and losing the geometric prior; our experiments (Table~\ref{tab:baseline_interim}) quantify the price of that trade under clutter and occlusion. Table~\ref{tab:attention_compare} summarizes the contrast.
+
+\begin{table}[htbp]
+\centering
+\caption{Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from.}
+\label{tab:attention_compare}
+\small
+\begin{tabular}{lll}
+\toprule
+& \textbf{Deep Hough voting (this work)} & \textbf{Transformer query decoding (DETR-lite)} \\
+\midrule
+Hypothesis space & Fixed geometric parameterization & Learned embeddings \\
+Attention weights & Geometry-determined (in support or not) & Learned via softmax similarity \\
+Support pattern & Sparse, exactly the curve's pixels & Dense, over all tokens \\
+Accumulator & Interpretable: indexed by $(\mathbf{a}, \mathbf{s})$ & Latent, not directly indexed by geometry \\
+Failure mode under clutter & Degrades with the evidence itself & Degrades with query-token similarity noise \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+This view suggests a spectrum: fixed geometric attention (this work), attention restricted to geometric supports but with learned per-pixel weights, and fully learned hypothesis embeddings that dispense with explicit parameterizations. The latter would extend voting beyond geometry, to structured hypothesis spaces such as graph motifs, which we leave to future work.
 
 \section{Limitations}
 Our benchmark is synthetic; transfer to natural and medical images is untested. The factorization requires a spatially meaningful anchor, which exists for conics and vertex-form polynomials but not obviously for every family. Stage 2 conditions on stage 1 peaks, so anchor misses are unrecoverable without the refinement stage. % TODO: expand after results.

@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.4.18)  17 JUL 2026 19:45
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.4.18)  17 JUL 2026 19:53
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -472,12 +472,7 @@ File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 ) [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
-
-LaTeX Warning: Reference `tab:memory_complexity' on page 4 undefined on input l
-ine 85.
-
-
-Overfull \hbox (15.80226pt too wide) in paragraph at lines 88--89
+Overfull \hbox (15.80226pt too wide) in paragraph at lines 109--110
 []\OT1/cmr/bx/n/10.95 Proposition 2 \OT1/cmr/m/n/10.95 (Per-mu-ta-tion in-vari-
 ance of vot-ing)\OT1/cmr/bx/n/10.95 . \OT1/cmr/m/it/10.95 The vot-ing op-er-a-t
 or $\OT1/cmr/bx/n/10.95 Y\OT1/cmr/m/n/10.95 (\OT1/cmr/bx/n/10.95 p\OT1/cmr/m/n/
@@ -486,51 +481,60 @@ or $\OT1/cmr/bx/n/10.95 Y\OT1/cmr/m/n/10.95 (\OT1/cmr/bx/n/10.95 p\OT1/cmr/m/n/
 /bx/n/10.95 X\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 i\OT1/cmr/m/n/10.95 )$
  []
 
-[4]
-
-LaTeX Warning: Reference `sec:intro' on page 5 undefined on input line 166.
-
-[5
+Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
+put line 117.
+[4
 pdfTeX warning (ext4): destination with the same identifier (name{table.1}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.167 
-      ] [6
+l.138 
+      ] [5] [6
 pdfTeX warning (ext4): destination with the same identifier (name{table.2}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.173 
+l.212 
       
 pdfTeX warning (ext4): destination with the same identifier (name{table.3}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.173 
-      ] [7] [8] (./main.aux)
+l.212 
+      ]
+Overfull \hbox (74.25981pt too wide) in paragraph at lines 222--233
+ [][] 
+ []
+
+[7
+pdfTeX warning (ext4): destination with the same identifier (name{table.4}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.239 
+      ] [8
+pdfTeX warning (ext4): destination with the same identifier (name{table.5}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.254 ...tem[Lin et~al.(2020)]{lin2020houghpriors}
+                                                   Y.~Lin, S.~L. Pintea, and...
+] [9] (./main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
  ***********
-
-
-LaTeX Warning: There were undefined references.
-
-
-LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
-
 Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 080300C537ABA95FC0B279C7C0A8243C;1985.
  ) 
 Here is how much of TeX's memory you used:
- 11392 strings out of 476106
- 172061 string characters out of 5793933
- 1939975 words of memory out of 5000000
- 33194 multiletter control sequences out of 15000+600000
- 569884 words of font info for 81 fonts, out of 8000000 for 9000
+ 11424 strings out of 476106
+ 172614 string characters out of 5793933
+ 1941975 words of memory out of 5000000
+ 33221 multiletter control sequences out of 15000+600000
+ 570183 words of font info for 82 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 75i,8n,79p,2208b,568s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,10n,79p,2208b,570s stack positions out of 10000i,1000n,20000p,200000b,200000s
  </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
 sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
 re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
@@ -543,17 +547,19 @@ c/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
 nts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/
 cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.p
 fb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr
-/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/t
-exlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive
-/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-
-dist/fonts/type1/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/f
-onts/type1/public/amsfonts/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/t
-ype1/public/amsfonts/symbols/msam10.pfb></usr/share/texlive/texmf-dist/fonts/ty
-pe1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (8 pages, 251499 bytes).
+/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/share/t
+exlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/t
+exmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dis
+t/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/font
+s/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1
+/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
+onts/symbols/msam10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/symbols/msbm10.pfb>
+Output written on main.pdf (9 pages, 278029 bytes).
 PDF statistics:
- 295 PDF objects out of 1000 (max. 8388607)
- 242 compressed objects within 3 object streams
- 57 named destinations out of 1000 (max. 500000)
+ 320 PDF objects out of 1000 (max. 8388607)
+ 262 compressed objects within 3 object streams
+ 61 named destinations out of 1000 (max. 500000)
  105 words of extra memory for PDF output out of 10000 (max. 10000000)
 
