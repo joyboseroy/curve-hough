@@ -1,0 +1,87 @@
+"""Synthetic parametric-curve benchmark: parabolas and circles with noise,
+occlusion, and distractor segments. Images are HxW float32 in [0,1]."""
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+
+
+def rasterize_points(img, xs, ys, width=2):
+    H, W = img.shape
+    for dx in range(-(width // 2), width // 2 + 1):
+        for dy in range(-(width // 2), width // 2 + 1):
+            xi = np.clip(np.round(xs + dx).astype(int), 0, W - 1)
+            yi = np.clip(np.round(ys + dy).astype(int), 0, H - 1)
+            img[yi, xi] = 1.0
+    return img
+
+
+def draw_parabola(img, x0, y0, a, n=600):
+    H, W = img.shape
+    xs = np.linspace(0, W - 1, n)
+    ys = a * (xs - x0) ** 2 + y0
+    m = (ys >= 0) & (ys < H)
+    return rasterize_points(img, xs[m], ys[m])
+
+
+def draw_circle(img, x0, y0, r, n=600):
+    t = np.linspace(0, 2 * np.pi, n)
+    xs, ys = x0 + r * np.cos(t), y0 + r * np.sin(t)
+    H, W = img.shape
+    m = (xs >= 0) & (xs < W) & (ys >= 0) & (ys < H)
+    return rasterize_points(img, xs[m], ys[m])
+
+
+def draw_segment(img, p, q, n=200):
+    xs = np.linspace(p[0], q[0], n)
+    ys = np.linspace(p[1], q[1], n)
+    return rasterize_points(img, xs, ys, width=2)
+
+
+class SyntheticCurves(Dataset):
+    """family: 'parabola' -> params (x0, y0, a); 'circle' -> (x0, y0, r)."""
+
+    def __init__(self, family="parabola", size=128, n_images=8000, seed=0,
+                 noise=0.08, occlude=True, distractors=True, max_curves=3):
+        self.family, self.size, self.n = family, size, n_images
+        self.noise, self.occlude, self.distractors = noise, occlude, distractors
+        self.max_curves = max_curves
+        self.seed = seed
+
+    def __len__(self):
+        return self.n
+
+    def sample_params(self, rng):
+        s = self.size
+        if self.family == "parabola":
+            x0 = rng.uniform(0.15 * s, 0.85 * s)
+            y0 = rng.uniform(0.15 * s, 0.85 * s)
+            a = rng.choice([-1, 1]) * rng.uniform(0.004, 0.06)
+            return np.array([x0, y0, a])
+        x0 = rng.uniform(0.2 * s, 0.8 * s)
+        y0 = rng.uniform(0.2 * s, 0.8 * s)
+        r = rng.uniform(0.08 * s, 0.35 * s)
+        return np.array([x0, y0, r])
+
+    def __getitem__(self, idx):
+        rng = np.random.default_rng(self.seed * 1000003 + idx)
+        s = self.size
+        img = np.zeros((s, s), np.float32)
+        k = rng.integers(1, self.max_curves + 1)
+        params = np.zeros((self.max_curves, 3), np.float32)
+        for j in range(k):
+            p = self.sample_params(rng)
+            params[j] = p
+            if self.family == "parabola":
+                draw_parabola(img, *p)
+            else:
+                draw_circle(img, *p)
+        if self.distractors:
+            for _ in range(rng.integers(0, 4)):
+                draw_segment(img, rng.uniform(0, s, 2), rng.uniform(0, s, 2))
+        if self.occlude:
+            for _ in range(rng.integers(0, 3)):
+                x, y = rng.integers(0, s, 2)
+                w, h = rng.integers(8, s // 3, 2)
+                img[y:y + h, x:x + w] = 0.0
+        img = np.clip(img + rng.normal(0, self.noise, img.shape), 0, 1).astype(np.float32)
+        return torch.from_numpy(img)[None], torch.from_numpy(params), int(k)

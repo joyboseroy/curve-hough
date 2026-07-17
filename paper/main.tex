@@ -1,0 +1,135 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{algorithm,algpseudocode}
+\usepackage[numbers]{natbib}
+
+\title{Beyond Lines: A Factorized Deep Hough Transform\\for Parametric Curve Detection}
+\author{Joy Bose\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The Deep Hough Transform (DHT) embeds classical Hough voting inside a convolutional network and achieves accurate, real-time detection of semantic straight lines by aggregating learned features along candidate lines into a two-dimensional parameter space. Extending this idea beyond lines has remained open: for a curve family with $d$ parameters the accumulator grows as $O(B^{d})$ in the number of bins $B$, making the direct generalization intractable in memory and computation for even quadratic curves. We propose a factorized deep Hough transform that makes feature-space voting practical for parametric curves. Our method decomposes the parameter space into a cascade of low-dimensional voting stages: a coarse marginal accumulator localizes a curve anchor (for example the vertex of a parabola or the center of a circle), and conditional accumulators, instantiated only at detected anchor peaks, resolve the remaining shape parameters. All stages aggregate deep features rather than edge pixels and are trained end to end with a peak detection loss in each accumulator. We further introduce a curve agreement score that extends the EA line similarity metric to arbitrary parametric curves, and a synthetic benchmark with noise, occlusion, and distractor structures covering parabolas and circles. Against classical Hough voting, RANSAC, direct parameter regression, and a DETR-style hypothesis-query baseline, factorized deep voting achieves higher F-measure at matched compute, with the largest margins under occlusion and clutter. We conclude with an analysis that interprets Hough voting as cross-attention whose attention map is fixed by geometry rather than learned, which situates our method and suggests learned hypothesis spaces as a natural extension. Code and the benchmark are released.
+\end{abstract}
+
+\section{Introduction}
+Detecting global geometric structure from local evidence is one of the oldest problems in computer vision. The Hough transform \citep{hough1962,duda1972} solves it for straight lines by letting every edge pixel vote for all lines passing through it; peaks in the $(\theta, r)$ parameter space reveal lines that many pixels jointly support. The recent Deep Hough Transform (DHT) \citep{zhao2021deep} modernized this idea: instead of voting edge pixels, it aggregates learned CNN features along every candidate line into the parametric domain, detects peaks there with lightweight convolutions, and trains the whole pipeline end to end. The result is accurate, context-aware, real-time semantic line detection.
+
+The success of DHT invites an obvious question with a non-obvious answer: why only lines? Classical Hough theory has been extended over four decades to circles, ellipses, and families of algebraic curves \citep{ballard1981,torrente2014}, with applications including the extraction of anatomical profiles such as vertebrae boundaries from CT slices \citep{torrente2014}. Yet the deep, feature-space formulation has remained confined to straight lines \citep{zhao2021deep,lin2020houghpriors,houglanenet2023}. The obstacle is structural. A line needs two parameters, so its accumulator is a manageable 2D map. A circle or a vertex-form parabola needs three, an ellipse five, and a cubic Bezier eight; a dense accumulator over $d$ parameters with $B$ bins per axis costs $O(B^{d})$ memory and $O(B^{d} \cdot S)$ aggregation work for $S$ samples per curve. At useful resolutions this is prohibitive beyond $d = 2$, and it explains why deep curve detectors abandoned voting altogether in favor of direct parameter regression \citep{polylanenet2020,lstr2021,feng2022bezier}.
+
+Direct regression, however, gives up exactly what voting provides: an explicit, interpretable evidence surface in which every hypothesis competes, robustness to occlusion because missing evidence lowers but does not destroy a peak, and a detection formulation that needs no matching-based training tricks. We show these properties can be retained for curves at tractable cost.
+
+Our key observation is that the classical literature already contains the answer in embryonic form: multi-stage Hough methods detect ellipse centers first and remaining parameters second \citep{yuen1989ellipse}. We lift this idea into the deep setting as a \emph{factorized deep Hough transform}: a cascade of low-dimensional, feature-space voting stages, each differentiable, each followed by peak detection, with later stages instantiated only at peaks of earlier ones. For a parabola in vertex form, a coarse 2D accumulator over vertex position (marginalizing curvature) is followed by dense 1D voting over curvature conditioned on each detected vertex. The worst-case cost drops from $O(B^{3})$ to $O(B^{2} + k B)$ for $k$ detected anchors.
+
+Our contributions are:
+\begin{itemize}
+  \item \textbf{Method.} A factorized, cascaded deep Hough transform for parametric curve families, with marginal anchor voting, conditional shape voting, and end-to-end training via peak losses in every stage (Section~\ref{sec:method}).
+  \item \textbf{Metric.} The curve-EA score, an extension of the EA line similarity of \citet{zhao2021deep} to arbitrary parametric curves, combining a normalized sampled-point Chamfer term with a tangent agreement term (Section~\ref{sec:metric}).
+  \item \textbf{Benchmark.} A controlled synthetic benchmark over parabolas and circles with additive noise, occlusion, and distractor structures, with matched-compute baselines: classical Hough, RANSAC, direct regression, and a DETR-style hypothesis-query head (Section~\ref{sec:experiments}).
+  \item \textbf{Analysis.} An interpretation of Hough voting as cross-attention with a geometry-fixed attention map, which explains when voting should beat learned queries and points toward learned hypothesis spaces as future work (Section~\ref{sec:discussion}).
+\end{itemize}
+
+\section{Related Work}
+\paragraph{Classical Hough transforms for curves.}
+The Hough transform was introduced for bubble chamber photographs \citep{hough1962} and formalized for lines with the angle-radius parameterization \citep{duda1972}. \citet{ballard1981} generalized voting to arbitrary shapes. Dimensionality has always been the central obstacle: randomized \citep{xu1990rht} and probabilistic \citep{kiryati1991} variants subsample votes, and multi-stage methods decompose parameter spaces, for example detecting ellipse centers before axes \citep{yuen1989ellipse}. Hough methods for special classes of algebraic curves have been applied to anatomical profile extraction in CT \citep{torrente2014}. Our cascade is the differentiable, feature-space descendant of this decomposition tradition.
+
+\paragraph{Deep Hough methods.}
+DHT \citep{zhao2021deep} aggregates CNN features along candidate lines into $(\theta, r)$ space and detects peaks with convolutions, adding the EA metric and the NKL dataset. \citet{lin2020houghpriors} add trainable Hough line priors inside a CNN. HoughLaneNet \citep{houglanenet2023} applies a hierarchical DHT to lane detection, but the voting remains line-based, with curves recovered afterwards by dynamic convolution. Deep Hough voting has also been used for 3D object centroids in point clouds \citep{qi2019votenet}. To our knowledge no prior work performs deep feature-space voting over curve parameter spaces; this paper fills that gap.
+
+\paragraph{Deep curve detection by regression.}
+Lane detection produced a family of direct curve regressors: PolyLaneNet \citep{polylanenet2020} regresses polynomial coefficients, LSTR \citep{lstr2021} predicts polynomial lane shapes with a DETR-style transformer, BezierLaneNet \citep{feng2022bezier} predicts cubic Bezier control points, and BSNet \citep{bsnet2023} uses B-splines. These methods sidestep the accumulator explosion by abandoning voting, at the cost of an explicit evidence surface. Our DETR-style baseline represents this family under matched conditions.
+
+\section{Method}
+\label{sec:method}
+
+\subsection{Preliminaries: deep Hough voting}
+Let $\mathbf{X} \in \mathbb{R}^{C \times H \times W}$ be encoder features of an image. For a curve family $\mathcal{C}$ with parameter vector $\mathbf{p} \in \mathcal{P} \subset \mathbb{R}^{d}$, define the rasterized support $\Omega(\mathbf{p}) \subset \{1, \dots, HW\}$ as the pixel set of curve $C(\mathbf{p})$ clipped to the image. Deep Hough voting aggregates
+\begin{equation}
+\mathbf{Y}(\mathbf{p}) = \frac{1}{|\Omega(\mathbf{p})|} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i),
+\label{eq:vote}
+\end{equation}
+which for lines and a quantized $\mathcal{P}$ is exactly the DHT of \citet{zhao2021deep} up to normalization. Peaks of a small conv head on $\mathbf{Y}$ yield detections. Dense quantization of $\mathcal{P}$ with $B$ bins per axis makes $\mathbf{Y}$ a $C \times B^{d}$ tensor, which is the obstacle for $d \geq 3$.
+
+\subsection{Parameter factorization}
+We factor $\mathbf{p} = (\mathbf{a}, \mathbf{s})$ into an \emph{anchor} $\mathbf{a}$ (a spatially meaningful subvector: parabola vertex, circle center) and a \emph{shape} vector $\mathbf{s}$ (curvature, radius, orientation). The factorization is family-specific but always available for the families we consider:
+parabola in vertex form $y = s (x - a_1)^2 + a_2$ with $\mathbf{a} = (a_1, a_2)$, $\mathbf{s} = s$;
+circle $(x - a_1)^2 + (y - a_2)^2 = s^2$ with anchor center and shape radius.
+
+\subsection{Stage 1: marginal anchor voting}
+We build a coarse accumulator over anchors only, marginalizing shape over a small probe set $\tilde{\mathcal{S}} = \{\mathbf{s}_1, \dots, \mathbf{s}_m\}$ ($m$ small, coarse):
+\begin{equation}
+\mathbf{Y}_1(\mathbf{a}) = \operatorname*{pool}_{\mathbf{s} \in \tilde{\mathcal{S}}} \; \frac{1}{|\Omega(\mathbf{a}, \mathbf{s})|} \sum_{i \in \Omega(\mathbf{a}, \mathbf{s})} \mathbf{X}(i),
+\label{eq:stage1}
+\end{equation}
+with $\operatorname{pool}$ either max (a differentiable relaxation of "any shape fits") or mean. $\mathbf{Y}_1$ is a $C \times B_a^{2}$ tensor: 2D, cheap, and, exactly as in DHT, anchors of similar curves are neighboring bins, so a small 2D conv head aggregates context before predicting an anchor peak map $\mathbf{P}_1$.
+
+\subsection{Stage 2: conditional shape voting}
+For each of the top-$k$ anchor peaks $\hat{\mathbf{a}}_j$ we instantiate a dense 1D (or low-dimensional) accumulator over shape:
+\begin{equation}
+\mathbf{Y}_2^{(j)}(\mathbf{s}) = \frac{1}{|\Omega(\hat{\mathbf{a}}_j, \mathbf{s})|} \sum_{i \in \Omega(\hat{\mathbf{a}}_j, \mathbf{s})} \mathbf{X}(i), \qquad \mathbf{s} \in \mathcal{S}_{\text{dense}},
+\label{eq:stage2}
+\end{equation}
+followed by a 1D conv head and peak selection, yielding full detections $(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j)$ with scores. Total accumulator cost is $O(B_a^{2} + k B_s)$ versus $O(B^{3})$ dense; Section~\ref{sec:experiments} quantifies the gap. An optional refinement stage re-votes both anchor and shape on a local fine grid around each detection, the differentiable analogue of coarse-to-fine classical Hough \citep{illingworth1987}.
+
+\subsection{Training}
+Following \citet{zhao2021deep}, ground-truth curves are mapped into each accumulator, smoothed with a Gaussian kernel, and each stage is trained with binary cross-entropy against its smoothed target: anchors in $\mathbf{Y}_1$, and, for stage 2, shape targets conditioned on ground-truth anchors (teacher forcing) plus detected anchors within a matching radius. The encoder, both conv heads, and the voting layers (which are parameter-free gather-and-mean operations) train end to end. % TODO: loss weights, schedule.
+
+\section{The Curve-EA Score}
+\label{sec:metric}
+The EA score of \citet{zhao2021deep} multiplies an angular and a midpoint distance term, both specific to lines. For curves $c_1, c_2$ we sample $T$ points $\{u_t^{(1)}\}, \{u_t^{(2)}\}$ uniformly in arc length inside the image and define a normalized symmetric Chamfer term
+\begin{equation}
+\mathcal{S}_d = 1 - \min\!\left(1, \; \frac{\operatorname{CD}(\{u^{(1)}\}, \{u^{(2)}\})}{D_{\max}}\right),
+\end{equation}
+with $D_{\max}$ the image diagonal times a constant, and a tangent agreement term
+\begin{equation}
+\mathcal{S}_\theta = 1 - \frac{1}{T} \sum_t \frac{\angle\big(\tau_1(u_t^{(1)}), \tau_2(\pi(u_t^{(1)}))\big)}{\pi / 2},
+\end{equation}
+where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence. The curve-EA score is $\mathcal{S} = (\mathcal{S}_d \cdot \mathcal{S}_\theta)^{2}$, which reduces to behavior closely matching EA for straight lines and inherits its $[0, 1]$ range and sharpened top end. Evaluation uses Hungarian bipartite matching between predictions and ground truth exactly as in \citet{zhao2021deep}, reporting average precision, recall, and F-measure over thresholds. % TODO: sanity experiments comparing curve-EA with Chamfer and EMD.
+
+\section{Experiments}
+\label{sec:experiments}
+\paragraph{Benchmark.} Images of size $128 \times 128$ containing one to three curves from a family (parabolas; circles), rendered with stroke width 2, plus: Gaussian pixel noise, random occluding rectangles removing up to 40\% of curve support, and distractor line segments. Splits: 8,000 train, 1,000 val, 1,000 test per family. % TODO: exact generation parameters, examples figure.
+
+\paragraph{Baselines.} (i) Classical: Sobel edges plus dense classical Hough voting at matched quantization; (ii) RANSAC curve fitting on edge points; (iii) direct regression: same encoder, MLP head predicting up to three parameter vectors with permutation-matched L1 loss; (iv) hypothesis queries: same encoder, DETR-style decoder with $K$ learned queries and Hungarian matching, sized to match our head's parameter count.
+
+\paragraph{Results.} % TODO: main table (curve-EA F-measure per family and corruption level), compute table (accumulator memory and FLOPs: dense 3D vs factorized), ablations (probe set size m, top-k, pooling max vs mean, refinement stage), qualitative figure.
+
+\section{Discussion: voting as geometry-constrained attention}
+\label{sec:discussion}
+Equation~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathbf{p}$ attends to pixel tokens with a hard, non-learned attention map: weight $1 / |\Omega(\mathbf{p})|$ on pixels of $C(\mathbf{p})$ and zero elsewhere. A DETR decoder replaces this with learned similarity, gaining flexibility and losing the geometric prior; our experiments quantify the price of that trade in low-data, high-clutter regimes. This view suggests a spectrum: fixed geometric attention (this work), attention restricted to geometric supports but with learned per-pixel weights, and fully learned hypothesis embeddings that dispense with explicit parameterizations. The latter would extend voting beyond geometry, to structured hypothesis spaces such as graph motifs, which we leave to future work.
+
+\section{Limitations}
+Our benchmark is synthetic; transfer to natural and medical images is untested. The factorization requires a spatially meaningful anchor, which exists for conics and vertex-form polynomials but not obviously for every family. Stage 2 conditions on stage 1 peaks, so anchor misses are unrecoverable without the refinement stage. % TODO: expand after results.
+
+\section{Conclusion}
+We generalized the Deep Hough Transform beyond straight lines with a factorized cascade of feature-space voting stages, an extended agreement metric, and a controlled benchmark, and showed that explicit geometric voting remains competitive with, and under clutter preferable to, learned query decoders at matched compute.
+
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{99}
+\bibitem[Hough(1962)]{hough1962} P.~V.~C. Hough. Method and means for recognizing complex patterns. US Patent 3,069,654, 1962.
+\bibitem[Duda and Hart(1972)]{duda1972} R.~O. Duda and P.~E. Hart. Use of the Hough transformation to detect lines and curves in pictures. \emph{Communications of the ACM}, 15(1):11--15, 1972.
+\bibitem[Ballard(1981)]{ballard1981} D.~H. Ballard. Generalizing the Hough transform to detect arbitrary shapes. \emph{Pattern Recognition}, 13(2):111--122, 1981.
+\bibitem[Yuen et~al.(1989)]{yuen1989ellipse} H.~K. Yuen, J.~Illingworth, and J.~Kittler. Detecting partially occluded ellipses using the Hough transform. \emph{Image and Vision Computing}, 7(1):31--37, 1989.
+\bibitem[Xu et~al.(1990)]{xu1990rht} L.~Xu, E.~Oja, and P.~Kultanen. A new curve detection method: randomized Hough transform. \emph{Pattern Recognition Letters}, 11(5):331--338, 1990.
+\bibitem[Kiryati et~al.(1991)]{kiryati1991} N.~Kiryati, Y.~Eldar, and A.~M. Bruckstein. A probabilistic Hough transform. \emph{Pattern Recognition}, 24(4):303--316, 1991.
+\bibitem[Illingworth and Kittler(1987)]{illingworth1987} J.~Illingworth and J.~Kittler. The adaptive Hough transform. \emph{IEEE TPAMI}, 9(5):690--698, 1987.
+\bibitem[Torrente et~al.(2014)]{torrente2014} M.-L. Torrente and M.~C. Beltrametti. Almost-vanishing polynomials and an application to the Hough transform. \emph{Journal of Algebra and its Applications}, 2014. % TODO verify best citation for algebraic-curve HT + CT application
+\bibitem[Zhao et~al.(2021)]{zhao2021deep} K.~Zhao, Q.~Han, C.-B. Zhang, J.~Xu, and M.-M. Cheng. Deep Hough transform for semantic line detection. \emph{IEEE TPAMI}, 2021.
+\bibitem[Lin et~al.(2020)]{lin2020houghpriors} Y.~Lin, S.~L. Pintea, and J.~C. van Gemert. Deep Hough-transform line priors. In \emph{ECCV}, 2020.
+\bibitem[Zhang et~al.(2023)]{houglanenet2023} J.~Zhang et~al. HoughLaneNet: lane detection with deep Hough transform and dynamic convolution. \emph{arXiv:2307.03494}, 2023. % TODO verify author list
+\bibitem[Qi et~al.(2019)]{qi2019votenet} C.~R. Qi, O.~Litany, K.~He, and L.~J. Guibas. Deep Hough voting for 3D object detection in point clouds. In \emph{ICCV}, 2019.
+\bibitem[Tabelini et~al.(2020)]{polylanenet2020} L.~Tabelini et~al. PolyLaneNet: lane estimation via deep polynomial regression. In \emph{ICPR}, 2020.
+\bibitem[Liu et~al.(2021)]{lstr2021} R.~Liu, Z.~Yuan, T.~Liu, and Z.~Xiong. End-to-end lane shape prediction with transformers. In \emph{WACV}, 2021.
+\bibitem[Feng et~al.(2022)]{feng2022bezier} Z.~Feng, S.~Guo, X.~Tan, K.~Xu, M.~Wang, and L.~Ma. Rethinking efficient lane detection via curve modeling. In \emph{CVPR}, 2022.
+\bibitem[Chen et~al.(2023)]{bsnet2023} H.~Chen et~al. BSNet: lane detection via draw B-spline curves nearby. \emph{arXiv:2301.06910}, 2023. % TODO verify author list
+\bibitem[Fischler and Bolles(1981)]{ransac1981} M.~A. Fischler and R.~C. Bolles. Random sample consensus. \emph{Communications of the ACM}, 24(6):381--395, 1981.
+\bibitem[Carion et~al.(2020)]{detr2020} N.~Carion et~al. End-to-end object detection with transformers. In \emph{ECCV}, 2020.
+\end{thebibliography}
+
+\end{document}

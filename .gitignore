@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+*.pth
+*.pt
+checkpoints/
+runs/
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.synctex.gz
+paper/*.pdf
+.venv/
+venv/
