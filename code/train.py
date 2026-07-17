@@ -24,7 +24,8 @@ def collate(batch):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--family", default="parabola", choices=["parabola", "circle"])
+    ap.add_argument("--family", default="parabola",
+                    choices=["parabola", "circle", "ellipse"])
     ap.add_argument("--size", type=int, default=128)
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--n-train", type=int, default=2000)

@@ -5,15 +5,24 @@ from scipy.optimize import linear_sum_assignment
 
 def sample_curve(family, p, size, n=200):
     if family == "parabola":
-        x0, y0, a = p
+        x0, y0, a = p[0], p[1], p[2]
         xs = np.linspace(0, size - 1, n)
         ys = a * (xs - x0) ** 2 + y0
         tang = np.stack([np.ones_like(xs), 2 * a * (xs - x0)], -1)
-    else:
-        x0, y0, r = p
+    elif family == "circle":
+        x0, y0, r = p[0], p[1], p[2]
         t = np.linspace(0, 2 * np.pi, n, endpoint=False)
         xs, ys = x0 + r * np.cos(t), y0 + r * np.sin(t)
         tang = np.stack([-np.sin(t), np.cos(t)], -1)
+    else:  # ellipse: p = (x0, y0, rx, ry, phi)
+        x0, y0, rx, ry, phi = p[0], p[1], p[2], p[3], p[4]
+        t = np.linspace(0, 2 * np.pi, n, endpoint=False)
+        ct, st = np.cos(phi), np.sin(phi)
+        xs = x0 + rx * np.cos(t) * ct - ry * np.sin(t) * st
+        ys = y0 + rx * np.cos(t) * st + ry * np.sin(t) * ct
+        dx = -rx * np.sin(t) * ct - ry * np.cos(t) * st
+        dy = -rx * np.sin(t) * st + ry * np.cos(t) * ct
+        tang = np.stack([dx, dy], -1)
     m = (xs >= 0) & (xs < size) & (ys >= 0) & (ys < size)
     pts = np.stack([xs, ys], -1)[m]
     tang = tang[m]
@@ -38,7 +47,9 @@ def curve_ea(family, p1, p2, size):
 
 
 def prf(dets_per_img, gts_per_img, family, size, thresholds=None, return_sims=False):
-    """dets: list per image of (x0, y0, s, score); gts: list per image of params."""
+    """dets: list per image of (x0, y0, *shape, score) -- variable length
+    depending on family (parabola/circle: 1 shape dim, ellipse: 3).
+    gts: list per image of params (same length as shape, sans score)."""
     if thresholds is None:
         thresholds = np.arange(0.01, 1.0, 0.01)
     P, R, F = [], [], []
@@ -51,7 +62,7 @@ def prf(dets_per_img, gts_per_img, family, size, thresholds=None, return_sims=Fa
         M = np.zeros((len(dets), len(gts)))
         for i, d in enumerate(dets):
             for j, g in enumerate(gts):
-                M[i, j] = curve_ea(family, d[:3], g, size)
+                M[i, j] = curve_ea(family, d[:-1], g, size)  # drop trailing score
         ri, ci = linear_sum_assignment(-M)
         sims_all.extend(M[ri, ci].tolist())
     sims_all = np.array(sims_all)

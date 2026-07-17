@@ -31,14 +31,29 @@ def draw_circle(img, x0, y0, r, n=600):
     return rasterize_points(img, xs[m], ys[m])
 
 
+def draw_ellipse(img, x0, y0, rx, ry, phi, n=600):
+    t = np.linspace(0, 2 * np.pi, n)
+    ct, st = np.cos(phi), np.sin(phi)
+    xs = x0 + rx * np.cos(t) * ct - ry * np.sin(t) * st
+    ys = y0 + rx * np.cos(t) * st + ry * np.sin(t) * ct
+    H, W = img.shape
+    m = (xs >= 0) & (xs < W) & (ys >= 0) & (ys < H)
+    return rasterize_points(img, xs[m], ys[m])
+
+
 def draw_segment(img, p, q, n=200):
     xs = np.linspace(p[0], q[0], n)
     ys = np.linspace(p[1], q[1], n)
     return rasterize_points(img, xs, ys, width=2)
 
 
+FAMILY_PARAM_LEN = {"parabola": 3, "circle": 3, "ellipse": 5}
+
+
 class SyntheticCurves(Dataset):
-    """family: 'parabola' -> params (x0, y0, a); 'circle' -> (x0, y0, r)."""
+    """family: 'parabola' -> params (x0, y0, a); 'circle' -> (x0, y0, r);
+    'ellipse' -> (x0, y0, rx, ry, phi). Param tensor is always width 5,
+    padded with zeros beyond each family's actual length."""
 
     def __init__(self, family="parabola", size=128, n_images=8000, seed=0,
                  noise=0.08, occlude=True, distractors=True, max_curves=3):
@@ -46,35 +61,45 @@ class SyntheticCurves(Dataset):
         self.noise, self.occlude, self.distractors = noise, occlude, distractors
         self.max_curves = max_curves
         self.seed = seed
+        self.param_len = FAMILY_PARAM_LEN[family]
 
     def __len__(self):
         return self.n
 
     def sample_params(self, rng):
         s = self.size
+        out = np.zeros(5)
         if self.family == "parabola":
-            x0 = rng.uniform(0.15 * s, 0.85 * s)
-            y0 = rng.uniform(0.15 * s, 0.85 * s)
-            a = rng.choice([-1, 1]) * rng.uniform(0.004, 0.06)
-            return np.array([x0, y0, a])
-        x0 = rng.uniform(0.2 * s, 0.8 * s)
-        y0 = rng.uniform(0.2 * s, 0.8 * s)
-        r = rng.uniform(0.08 * s, 0.35 * s)
-        return np.array([x0, y0, r])
+            out[0] = rng.uniform(0.15 * s, 0.85 * s)
+            out[1] = rng.uniform(0.15 * s, 0.85 * s)
+            out[2] = rng.choice([-1, 1]) * rng.uniform(0.004, 0.06)
+        elif self.family == "circle":
+            out[0] = rng.uniform(0.2 * s, 0.8 * s)
+            out[1] = rng.uniform(0.2 * s, 0.8 * s)
+            out[2] = rng.uniform(0.08 * s, 0.35 * s)
+        else:  # ellipse
+            out[0] = rng.uniform(0.25 * s, 0.75 * s)
+            out[1] = rng.uniform(0.25 * s, 0.75 * s)
+            out[2] = rng.uniform(0.10 * s, 0.30 * s)   # rx
+            out[3] = rng.uniform(0.06 * s, 0.22 * s)   # ry (< rx typical)
+            out[4] = rng.uniform(0, np.pi)             # phi
+        return out
 
     def __getitem__(self, idx):
         rng = np.random.default_rng(self.seed * 1000003 + idx)
         s = self.size
         img = np.zeros((s, s), np.float32)
         k = rng.integers(1, self.max_curves + 1)
-        params = np.zeros((self.max_curves, 3), np.float32)
+        params = np.zeros((self.max_curves, 5), np.float32)
         for j in range(k):
             p = self.sample_params(rng)
             params[j] = p
             if self.family == "parabola":
-                draw_parabola(img, *p)
+                draw_parabola(img, p[0], p[1], p[2])
+            elif self.family == "circle":
+                draw_circle(img, p[0], p[1], p[2])
             else:
-                draw_circle(img, *p)
+                draw_ellipse(img, p[0], p[1], p[2], p[3], p[4])
         if self.distractors:
             for _ in range(rng.integers(0, 4)):
                 draw_segment(img, rng.uniform(0, s, 2), rng.uniform(0, s, 2))
