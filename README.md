@@ -18,8 +18,27 @@ cascade of low-dimensional, feature-space voting stages.
 - code/train.py : training and evaluation entry point
 
 ## Status
-Smoke test passes end to end (data -> vote -> train step -> detect ->
-curve-EA eval): `python train.py --smoke`
+Smoke test passes end to end: `python train.py --smoke`
+
+## v4 decode fixes (after first real run showed P 0.478 / R 0.026)
+- detect(): CenterNet-style 3x3 local-max NMS on the anchor map, probability
+  threshold (default 0.25) instead of raw-logit > 0, soft-argmax sub-bin
+  refinement of anchor coords and shape value
+- stage 1: logsumexp probe pooling instead of amax
+- stage 1 loss: pos_weight=8 so peak logits calibrate above threshold
+- train.py: --easy flag (no noise/occlusion/distractors, single curve) and
+  --thresh; eval now prints detection vs GT counts
+
+## Validation protocol (run in this order, keep all real numbers)
+1. `python train.py --family parabola --size 64 --epochs 10 --n-train 1000
+   --n-test 200 --easy`  -> algorithm sanity: expect high F (0.8+). If not,
+   debug before anything else.
+2. Same without --easy -> the honest hard-setting number.
+3. Then circles, then baselines, then 128 px on Colab for the paper table.
+
+IMPORTANT: results tables in the paper must contain only numbers produced by
+these runs. Do not paste numbers from any external draft or suggestion; no
+run has produced any paper-ready table yet.
 
 ## Remaining work (ordered)
 1. DONE: stage-2 teacher-forced supervision is wired (hough.py stage2_loss,

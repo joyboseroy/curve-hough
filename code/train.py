@@ -32,6 +32,9 @@ def main():
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--smoke", action="store_true")
+    ap.add_argument("--easy", action="store_true",
+                    help="no noise/occlusion/distractors, single curve")
+    ap.add_argument("--thresh", type=float, default=0.25)
     args = ap.parse_args()
     if args.smoke:
         args.epochs, args.n_train, args.n_test, args.size = 1, 16, 8, 64
@@ -39,8 +42,10 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(0)
     np.random.seed(0)
-    train = SyntheticCurves(args.family, args.size, args.n_train, seed=1)
-    test = SyntheticCurves(args.family, args.size, args.n_test, seed=2)
+    kw = dict(noise=0.0, occlude=False, distractors=False, max_curves=1) \
+        if args.easy else {}
+    train = SyntheticCurves(args.family, args.size, args.n_train, seed=1, **kw)
+    test = SyntheticCurves(args.family, args.size, args.n_test, seed=2, **kw)
     tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
     model = FactorizedDHT(args.family, args.size,
                           anchor_bins=24 if args.smoke else 32).to(dev)
@@ -67,9 +72,12 @@ def main():
     dets_all, gts_all = [], []
     for i in range(len(test)):
         img, params, k = test[i]
-        dets = model.detect(img[None].to(dev))[0]
+        dets = model.detect(img[None].to(dev), thresh=args.thresh)[0]
         dets_all.append(dets)
         gts_all.append([params[j].numpy() for j in range(k)])
+    n_det = sum(len(d) for d in dets_all)
+    n_gt = sum(len(g) for g in gts_all)
+    print(f"detections {n_det} vs ground truth {n_gt}")
     p, r, f = prf(dets_all, gts_all, args.family, args.size)
     print(f"curve-EA avg P {p:.3f} R {r:.3f} F {f:.3f}")
 

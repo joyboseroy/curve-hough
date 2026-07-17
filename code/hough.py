@@ -113,7 +113,7 @@ class FactorizedDHT(nn.Module):
         X = self.encoder(img)                                  # [B, C, H, W]
         feat = X.flatten(2)                                    # [B, C, HW]
         Y1 = vote(feat, self.bank1)                            # [B, C, A, S]
-        Y1 = Y1.amax(-1)                                       # max-pool probes
+        Y1 = torch.logsumexp(Y1, dim=-1)                       # soft-max pool probes
         Y1 = Y1.reshape(B, -1, self.Ba, self.Ba)               # [B, C, Ba, Ba]
         P1 = self.head1(Y1)                                    # anchor logits
         # top-k anchors per image
@@ -159,20 +159,50 @@ class FactorizedDHT(nn.Module):
 
     # ------------------------------------------------------------- decoding
     @torch.no_grad()
-    def detect(self, img, thresh=0.0):
-        P1, P2, picked, _ = self.forward(img)
+    def detect(self, img, thresh=0.25):
+        """thresh is a probability (sigmoid of the anchor logit)."""
+        B = img.shape[0]
+        X = self.encoder(img)
+        feat = X.flatten(2)
+        Y1 = vote(feat, self.bank1)
+        Y1 = torch.logsumexp(Y1, dim=-1).reshape(B, -1, self.Ba, self.Ba)
+        P1 = self.head1(Y1)                                    # [B, 1, Ba, Ba]
+        # CenterNet-style NMS: keep local maxima of the 3x3 neighbourhood
+        pooled = F.max_pool2d(P1, 3, stride=1, padding=1)
+        peaks = (P1 == pooled).float() * torch.sigmoid(P1)
+        scale = (self.size - 1) / (self.Ba - 1)
         out = []
-        for b in range(img.shape[0]):
+        for b in range(B):
+            grid = P1[b, 0]
+            pk = peaks[b, 0].flatten()
+            vals, idxs = pk.topk(self.topk)
             dets = []
-            for j, a_idx in enumerate(picked[b].tolist()):
-                score1 = P1[b, 0].flatten()[a_idx].item()
-                if score1 < thresh:
+            for v, a_idx in zip(vals.tolist(), idxs.tolist()):
+                if v < thresh:
                     continue
-                s_prof = P2[b, j, 0]
+                ri, ci = a_idx // self.Ba, a_idx % self.Ba
+                # soft-argmax over the 3x3 neighbourhood for sub-bin coords
+                y0n, y1n = max(0, ri - 1), min(self.Ba, ri + 2)
+                x0n, x1n = max(0, ci - 1), min(self.Ba, ci + 2)
+                nb = grid[y0n:y1n, x0n:x1n]
+                w = torch.softmax(nb.flatten(), 0)
+                yy, xx = torch.meshgrid(
+                    torch.arange(y0n, y1n, device=img.device, dtype=torch.float32),
+                    torch.arange(x0n, x1n, device=img.device, dtype=torch.float32),
+                    indexing="ij")
+                ay = float((yy.flatten() * w).sum()) * scale
+                ax = float((xx.flatten() * w).sum()) * scale
+                # stage 2 at the peak's bin anchor
+                bank2 = self.bank2_for(a_idx, img.device)
+                y2 = vote(feat[b:b + 1], bank2)
+                s_prof = self.head2(y2)[0, 0]                  # [S2]
                 s_idx = int(s_prof.argmax())
-                ax, ay = self.anchors[a_idx]
-                dets.append((float(ax), float(ay), float(self.dense[s_idx]),
-                             score1 + float(s_prof[s_idx])))
+                lo, hi = max(0, s_idx - 1), min(len(self.dense), s_idx + 2)
+                sw = torch.softmax(s_prof[lo:hi], 0)
+                dvals = torch.as_tensor(self.dense[lo:hi], dtype=torch.float32,
+                                        device=img.device)
+                s_val = float((sw * dvals).sum())
+                dets.append((ax, ay, s_val, v))
             out.append(dets)
         return out
 
@@ -196,4 +226,5 @@ def stage1_loss(P1, params_batch, counts, size):
     tgt = torch.stack([
         gaussian_target(Ba, [(p[0], p[1]) for p in params_batch[b][:counts[b]]], Ba, size)
         for b in range(B)]).to(P1.device)[:, None]
-    return F.binary_cross_entropy_with_logits(P1, tgt)
+    return F.binary_cross_entropy_with_logits(
+        P1, tgt, pos_weight=torch.tensor(8.0, device=P1.device))
