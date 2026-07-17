@@ -37,12 +37,11 @@ def curve_ea(family, p1, p2, size):
     return float((Sd * Sth) ** 2)
 
 
-def prf(dets_per_img, gts_per_img, family, size, thresholds=None):
+def prf(dets_per_img, gts_per_img, family, size, thresholds=None, return_sims=False):
     """dets: list per image of (x0, y0, s, score); gts: list per image of params."""
     if thresholds is None:
         thresholds = np.arange(0.01, 1.0, 0.01)
     P, R, F = [], [], []
-    # precompute matched similarity lists
     sims_all, n_det, n_gt = [], 0, 0
     for dets, gts in zip(dets_per_img, gts_per_img):
         n_det += len(dets)
@@ -63,4 +62,7 @@ def prf(dets_per_img, gts_per_img, family, size, thresholds=None):
         P.append(p)
         R.append(r)
         F.append(2 * p * r / max(p + r, 1e-9))
-    return float(np.mean(P)), float(np.mean(R)), float(np.mean(F))
+    result = (float(np.mean(P)), float(np.mean(R)), float(np.mean(F)))
+    if return_sims:
+        return result, sims_all
+    return result

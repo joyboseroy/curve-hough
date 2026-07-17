@@ -35,6 +35,14 @@ def main():
     ap.add_argument("--easy", action="store_true",
                     help="no noise/occlusion/distractors, single curve")
     ap.add_argument("--thresh", type=float, default=0.25)
+    ap.add_argument("--save", default="")
+    ap.add_argument("--load", default="")
+    ap.add_argument("--sweep", action="store_true",
+                    help="load a checkpoint and report P/R/F across thresholds, no training")
+    ap.add_argument("--topk", type=int, default=None,
+                    help="max detections per image (defaults to model's, 4)")
+    ap.add_argument("--diag", action="store_true",
+                    help="print matched curve-EA similarity distribution")
     args = ap.parse_args()
     if args.smoke:
         args.epochs, args.n_train, args.n_test, args.size = 1, 16, 8, 64
@@ -48,38 +56,63 @@ def main():
     test = SyntheticCurves(args.family, args.size, args.n_test, seed=2, **kw)
     tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
     model = FactorizedDHT(args.family, args.size,
-                          anchor_bins=24 if args.smoke else 32).to(dev)
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+                          anchor_bins=24 if args.smoke else 32,
+                          topk=args.topk if args.topk else 4).to(dev)
 
-    for ep in range(args.epochs):
-        model.train()
-        losses = []
-        for imgs, params, counts in tl:
-            imgs = imgs.to(dev)
-            P1, P2, picked, feat = model(imgs)
-            l1 = stage1_loss(P1, params, counts, args.size)
-            l2 = model.stage2_loss(feat, params, counts)
-            loss = l1 + l2
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            losses.append((l1.item(), l2.item()))
-        m = np.mean(losses, axis=0)
-        print(f"epoch {ep}: stage1 {m[0]:.4f}  stage2 {m[1]:.4f}")
+    if args.load:
+        model.load_state_dict(torch.load(args.load, map_location=dev))
+        print(f"loaded {args.load}")
+    else:
+        opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+        for ep in range(args.epochs):
+            model.train()
+            losses = []
+            for imgs, params, counts in tl:
+                imgs = imgs.to(dev)
+                P1, P2, picked, feat = model(imgs)
+                l1 = stage1_loss(P1, params, counts, args.size)
+                l2 = model.stage2_loss(feat, params, counts)
+                loss = l1 + l2
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                losses.append((l1.item(), l2.item()))
+            m = np.mean(losses, axis=0)
+            print(f"epoch {ep}: stage1 {m[0]:.4f}  stage2 {m[1]:.4f}")
+        if args.save:
+            torch.save(model.state_dict(), args.save)
+            print(f"saved {args.save}")
 
     # evaluation
     model.eval()
-    dets_all, gts_all = [], []
+    gts_by_img = []
     for i in range(len(test)):
-        img, params, k = test[i]
-        dets = model.detect(img[None].to(dev), thresh=args.thresh)[0]
-        dets_all.append(dets)
-        gts_all.append([params[j].numpy() for j in range(k)])
-    n_det = sum(len(d) for d in dets_all)
-    n_gt = sum(len(g) for g in gts_all)
-    print(f"detections {n_det} vs ground truth {n_gt}")
-    p, r, f = prf(dets_all, gts_all, args.family, args.size)
-    print(f"curve-EA avg P {p:.3f} R {r:.3f} F {f:.3f}")
+        _, params, k = test[i]
+        gts_by_img.append([params[j].numpy() for j in range(k)])
+
+    def run_eval(thresh):
+        dets_all = []
+        for i in range(len(test)):
+            img, _, _ = test[i]
+            dets_all.append(model.detect(img[None].to(dev), thresh=thresh)[0])
+        n_det = sum(len(d) for d in dets_all)
+        n_gt = sum(len(g) for g in gts_by_img)
+        (p, r, f), sims = prf(dets_all, gts_by_img, args.family, args.size,
+                              return_sims=True)
+        print(f"thresh {thresh:.2f}: detections {n_det} vs gt {n_gt}  "
+              f"P {p:.3f} R {r:.3f} F {f:.3f}")
+        if args.diag and len(sims):
+            q = np.percentile(sims, [10, 25, 50, 75, 90])
+            print(f"  matched curve-EA similarity: mean {sims.mean():.3f}  "
+                  f"p10/p25/p50/p75/p90 = {q[0]:.2f}/{q[1]:.2f}/{q[2]:.2f}/"
+                  f"{q[3]:.2f}/{q[4]:.2f}  (n={len(sims)})")
+        return f
+
+    if args.sweep:
+        for t in [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75]:
+            run_eval(t)
+    else:
+        run_eval(args.thresh)
 
 
 if __name__ == "__main__":

@@ -1,11 +1,12 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{algorithm,algpseudocode}
 \usepackage[numbers]{natbib}
+\newtheorem{proposition}{Proposition}
 
 \title{Beyond Lines: A Factorized Deep Hough Transform\\for Parametric Curve Detection}
 \author{Joy Bose\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
@@ -77,6 +78,18 @@ For each of the top-$k$ anchor peaks $\hat{\mathbf{a}}_j$ we instantiate a dense
 \end{equation}
 followed by a 1D conv head and peak selection, yielding full detections $(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j)$ with scores. Total accumulator cost is $O(B_a^{2} + k B_s)$ versus $O(B^{3})$ dense; Section~\ref{sec:experiments} quantifies the gap. An optional refinement stage re-votes both anchor and shape on a local fine grid around each detection, the differentiable analogue of coarse-to-fine classical Hough \citep{illingworth1987}.
 
+\begin{proposition}[Memory complexity]
+For a curve family with parameter vector $\mathbf{p} \in \mathbb{R}^{d}$ factored as $(\mathbf{a}, \mathbf{s})$ with $\mathbf{a} \in \mathbb{R}^{d_1}$, $\mathbf{s} \in \mathbb{R}^{d_2}$, $d_1 + d_2 = d$, and $B$ quantization bins per axis, the dense accumulator of Equation~\ref{eq:vote} occupies $O(B^{d})$ entries. The cascade of Sections~3.3--3.4 occupies $O(B^{d_1} + k B^{d_2})$ entries, where $k$ is the number of anchor peaks retained. \emph{Proof.} Stage 1 (Eq.~\ref{eq:stage1}) accumulates over $\mathbf{a}$ only, marginalizing $\mathbf{s}$ over a fixed probe set $\tilde{\mathcal{S}}$ of size $m$ independent of $B$, giving a $B^{d_1}$-sized tensor. Stage 2 (Eq.~\ref{eq:stage2}) is instantiated only at the $k$ retained peaks, each contributing a $B^{d_2}$-sized tensor, giving $k B^{d_2}$ total. Summing the two stages gives the stated bound. $\blacksquare$
+\end{proposition}
+
+For our parabola and circle families, $d_1 = 2$ (anchor) and $d_2 = 1$ (shape), so the cascade is $O(B^{2} + kB)$ against a dense $O(B^{3})$; Table~\ref{tab:memory_complexity} reports the measured ratio.
+
+\begin{proposition}[Permutation invariance of voting]
+The voting operator $\mathbf{Y}(\mathbf{p}) = |\Omega(\mathbf{p})|^{-1} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i)$ is invariant to any permutation of the pixel indices within $\Omega(\mathbf{p})$. \emph{Proof.} Summation and the cardinality-normalizing constant are both invariant to the order in which elements of a finite index set are enumerated; $\Omega(\mathbf{p})$ is a set, so Equation~\ref{eq:vote} depends only on the multiset of feature values $\{\mathbf{X}(i) : i \in \Omega(\mathbf{p})\}$, not their traversal order. $\blacksquare$
+\end{proposition}
+
+This property is what allows the gather-and-mean implementation (a fixed index bank per candidate curve) to be computed with no ordering assumptions and no positional encoding, unlike a learned-attention alternative over the same support.
+
 \subsection{Training}
 Following \citet{zhao2021deep}, ground-truth curves are mapped into each accumulator, smoothed with a Gaussian kernel, and each stage is trained with binary cross-entropy against its smoothed target: anchors in $\mathbf{Y}_1$, and, for stage 2, shape targets conditioned on ground-truth anchors (teacher forcing) plus detected anchors within a matching radius. The encoder, both conv heads, and the voting layers (which are parameter-free gather-and-mean operations) train end to end. % TODO: loss weights, schedule.
 
@@ -98,7 +111,7 @@ where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence
 
 \paragraph{Baselines.} (i) Classical: Sobel edges plus dense classical Hough voting at matched quantization; (ii) RANSAC curve fitting on edge points; (iii) direct regression: same encoder, MLP head predicting up to three parameter vectors with permutation-matched L1 loss; (iv) hypothesis queries: same encoder, DETR-style decoder with $K$ learned queries and Hungarian matching, sized to match our head's parameter count.
 
-\paragraph{Results.} % TODO: main table (curve-EA F-measure per family and corruption level), compute table (accumulator memory and FLOPs: dense 3D vs factorized), ablations (probe set size m, top-k, pooling max vs mean, refinement stage), qualitative figure.
+\paragraph{Results.} We report, per family and corruption level: curve-EA average precision, recall, and F-measure (Hungarian-matched, thresholds swept as in \citet{zhao2021deep}); measured accumulator memory, dense $O(B^{d})$ versus our $O(B^{d_1} + kB^{d_2})$ (Proposition 1), including a no-factorization control that we expect to hit memory or runtime limits at $B \geq 32$ for $d=3$; and the following ablations, each varying one factor with the rest fixed at the main-result setting: (i) Stage-1 pooling, max vs.\ mean vs.\ log-sum-exp; (ii) probe set size $m \in \{4, 8, 16, 32\}$; (iii) retained anchor peaks $k \in \{1, 2, 4, 8\}$; (iv) additive noise level $\sigma_n \in \{0, 0.1, 0.2, 0.4\}$; (v) occlusion fraction $\in \{0, 0.2, 0.4, 0.6\}$; (vi) with vs.\ without the coarse-to-fine refinement stage. % TODO: fill in as each ablation run completes; keep only measured numbers.
 
 \section{Discussion: voting as geometry-constrained attention}
 \label{sec:discussion}
