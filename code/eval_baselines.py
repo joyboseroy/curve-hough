@@ -49,7 +49,11 @@ def main():
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=2e-4)
     ap.add_argument("--easy", action="store_true")
-    ap.add_argument("--thresh", type=float, default=0.5)
+    ap.add_argument("--thresh", type=float, default=0.3)
+    ap.add_argument("--save", default="")
+    ap.add_argument("--load", default="")
+    ap.add_argument("--sweep", action="store_true")
+    ap.add_argument("--pos-weight", type=float, default=4.0)
     # classical/RANSAC are O(anchor^2 * shapes) per image; keep test set small
     # or lower these for speed.
     ap.add_argument("--classical-anchor-bins", type=int, default=16)
@@ -79,30 +83,56 @@ def main():
             if (i + 1) % 20 == 0:
                 print(f"  {i+1}/{len(test)} images processed")
     else:
-        train = SyntheticCurves(args.family, args.size, args.n_train, seed=1, **kw)
-        tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
         model = (RegressionHead() if args.model == "regression" else QueryHead()).to(dev)
-        opt = torch.optim.Adam(model.parameters(), lr=args.lr)
-        for ep in range(args.epochs):
-            model.train()
-            losses = []
-            for imgs, params, counts in tl:
-                imgs, params = imgs.to(dev), params.to(dev)
-                pred, logits = model(imgs)
-                loss = hungarian_param_loss(pred, logits, params, counts)
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-                losses.append(loss.item())
-            print(f"epoch {ep}: loss {np.mean(losses):.4f}")
+        if args.load:
+            model.load_state_dict(torch.load(args.load, map_location=dev))
+            print(f"loaded {args.load}")
+        else:
+            train = SyntheticCurves(args.family, args.size, args.n_train, seed=1, **kw)
+            tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
+            opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+            for ep in range(args.epochs):
+                model.train()
+                losses = []
+                for imgs, params, counts in tl:
+                    imgs, params = imgs.to(dev), params.to(dev)
+                    pred, logits = model(imgs)
+                    loss = hungarian_param_loss(pred, logits, params, counts,
+                                                family=args.family,
+                                                pos_weight=args.pos_weight)
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+                    losses.append(loss.item())
+                print(f"epoch {ep}: loss {np.mean(losses):.4f}")
+            if args.save:
+                torch.save(model.state_dict(), args.save)
+                print(f"saved {args.save}")
 
+        # cache raw predictions once; sweep thresholds for free
         model.eval()
-        dets_all = []
+        raw = []
         with torch.no_grad():
             for i in range(len(test)):
                 img = test[i][0][None].to(dev)
                 pred, logits = model(img)
-                dets_all.append(learned_dets(pred[0].cpu(), logits[0].cpu(), args.thresh))
+                raw.append((pred[0].cpu(), logits[0].cpu()))
+
+        def eval_at(thresh):
+            dets_all = [learned_dets(p, l, thresh) for p, l in raw]
+            n_det = sum(len(d) for d in dets_all)
+            n_gt = sum(len(g) for g in gts_by_img)
+            p, r, f = prf(dets_all, gts_by_img, args.family, args.size)
+            print(f"[{args.model}] thresh {thresh:.2f}: detections {n_det} vs gt {n_gt}  "
+                  f"P {p:.3f} R {r:.3f} F {f:.3f}")
+            return f
+
+        if args.sweep:
+            for t in [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+                eval_at(t)
+        else:
+            eval_at(args.thresh)
+        return
 
     n_det = sum(len(d) for d in dets_all)
     n_gt = sum(len(g) for g in gts_by_img)

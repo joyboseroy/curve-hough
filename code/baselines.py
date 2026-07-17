@@ -127,20 +127,35 @@ class QueryHead(nn.Module):
         return out[..., :3], out[..., 3]
 
 
-def hungarian_param_loss(pred, logits, gts, counts):
-    """Permutation-matched L1 + BCE presence, per batch element."""
+FAMILY_SCALE = {
+    # per-dim scale so cdist/L1 cost weighs position and shape comparably.
+    # (x0, y0 are pixel-scale; parabola 'a' is tiny, circle 'r' is pixel-scale)
+    "parabola": torch.tensor([1.0, 1.0, 0.03]),
+    "circle": torch.tensor([1.0, 1.0, 1.0]),
+}
+
+
+def hungarian_param_loss(pred, logits, gts, counts, family="parabola", pos_weight=4.0):
+    """Permutation-matched L1 + BCE presence, per batch element.
+    Parameters are normalized per-dimension before matching/loss so that a
+    tiny shape parameter (e.g. parabola curvature) isn't drowned out by
+    pixel-scale position error, and presence BCE uses pos_weight to offset
+    the class imbalance between K queries and a few true curves."""
     B = pred.shape[0]
+    scale = FAMILY_SCALE[family].to(pred.device)
     total = pred.new_zeros(())
+    pw = torch.tensor(pos_weight, device=pred.device)
     for b in range(B):
         g = gts[b][:counts[b]]
         if counts[b] == 0:
             total = total + nn.functional.binary_cross_entropy_with_logits(
-                logits[b], torch.zeros_like(logits[b]))
+                logits[b], torch.zeros_like(logits[b]), pos_weight=pw)
             continue
-        cost = torch.cdist(pred[b], g)                         # [K, k]
+        cost = torch.cdist(pred[b] / scale, g / scale)          # [K, k]
         ri, ci = linear_sum_assignment(cost.detach().cpu().numpy())
         tgt = torch.zeros_like(logits[b])
         tgt[list(ri)] = 1.0
         total = total + cost[ri, ci].mean() * 0.1 \
-            + nn.functional.binary_cross_entropy_with_logits(logits[b], tgt)
+            + nn.functional.binary_cross_entropy_with_logits(
+                logits[b], tgt, pos_weight=pw)
     return total / B
