@@ -2,6 +2,7 @@
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage{booktabs}
 \usepackage{hyperref}
 \usepackage{algorithm,algpseudocode}
@@ -113,6 +114,13 @@ This property is what allows the gather-and-mean implementation (a fixed index b
 
 Algorithm~\ref{alg:cascade} summarizes training-time inference for one image; index banks $\Omega(\cdot)$ are precomputed once per family and resolution and reused across all images.
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/accumulator_schematic.pdf}
+\caption{Dense accumulator (left) vs.\ the factorized cascade (right), drawn to scale with the measured element counts of Table~\ref{tab:memory_complexity}. The dense accumulator materializes every $(\text{anchor}, \text{shape})$ combination at once; the cascade computes a coarse 2D anchor map, retains a handful of peaks, and instantiates a dense shape accumulator only at each retained peak.}
+\label{fig:accumulator_schematic}
+\end{figure}
+
 \begin{algorithm}
 \caption{Factorized deep Hough cascade (inference)}
 \label{alg:cascade}
@@ -203,6 +211,16 @@ Corrupted (main)   & 0.350 & 0.311 & 0.329 & $-0.352$ (51.7\% relative) \\
 \end{table}
 
 Notably, the ellipse clean-control F (0.681) exceeds the parabola clean-control F (0.650, Table~\ref{tab:parabola_interim}) despite ellipse's substantially larger parameter space ($d=5$ vs.\ $d=3$) and 3-dimensional shape accumulator (vs.\ 1-dimensional for parabola and circle), supporting the claim that the factorization's clean-setting accuracy does not degrade with dimensionality on its own. The corrupted setting tells a different, and equally important, story: ellipse's absolute drop from clean to corrupted (0.352) is nearly three times parabola's (0.125, 19.2\% relative), so while factorized voting remains \emph{tractable} at $d=5$ (Proposition~1, and the fact that training and inference complete at all where a dense accumulator would not), its \emph{robustness to partial evidence} degrades faster as shape dimensionality grows. This is intuitive: an occluded arc of an ellipse constrains a joint $(r_x, r_y, \phi)$ far more weakly than an occluded arc of a circle constrains a single radius, so the same occlusion fraction removes proportionally more identifying evidence at higher $d$. We report this as an honest limitation rather than a result to be smoothed over; the coarse-to-fine re-voting refinement described but not yet implemented (Section~\ref{sec:method}) is a plausible mitigation, since it would let the model recover shape precision from whatever partial evidence survives occlusion rather than relying on a single coarse-to-dense pass. % TODO: ellipse baselines (RANSAC 5-point conic fit is the key comparison) to establish whether this degradation is specific to our method or a property of the corrupted setting at this dimensionality generally.
+
+\paragraph{Qualitative results.} % TODO: uncomment once code/make_figures.py has been run against real checkpoints (parabola_hard.pt, circle_hard.pt, ellipse_hard.pt) and the PNGs are copied into paper/figures/.
+% \begin{figure}[htbp]
+% \centering
+% \includegraphics[width=0.32\textwidth]{figures/stage1_heatmap_parabola.png}
+% \includegraphics[width=0.32\textwidth]{figures/stage2_profile_parabola.png}
+% \includegraphics[width=0.32\textwidth]{figures/qualitative_parabola.png}
+% \caption{Stage-1 anchor accumulator (left), Stage-2 shape profile at the top peak (center), and the resulting detection against ground truth (right), for a representative parabola test image.}
+% \label{fig:qualitative_parabola}
+% \end{figure}
 
 \begin{table}[htbp]
 \centering

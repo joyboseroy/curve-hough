@@ -31,24 +31,7 @@ cascade of low-dimensional, feature-space voting stages.
 Smoke tests pass end to end for all three families:
 `python train.py --smoke`, `--family circle --smoke`, `--family ellipse --smoke`
 
-## v14: checkpoint-every-epoch + resume, and a paper-vs-code honesty fix
-A long run timing out used to lose all progress (train.py only saved at the
-very end). Now `--save` checkpoints after every epoch, and `--resume
-<path>` loads a checkpoint and continues training for `--epochs` more
-epochs (unlike `--load`, which skips straight to eval). If a run times out,
-rerun with `--resume` on the same save path instead of starting over.
-
-Also: a review correctly caught that Section 3.4 and the Limitations
-paragraph described an "optional refinement stage" (re-voting on a newly
-built finer grid, the coarse-to-fine classical Hough analogue) as if it
-were implemented and ablatable. It isn't -- only cheap soft-argmax
-interpolation over the existing coarse grid is implemented (and that part
-of the review's other claims -- logsumexp pooling, NMS, soft-argmax decode
--- were verified as genuinely implemented, so the review was right about
-one specific thing and overstated on the rest). Fixed: the paper now
-clearly separates "soft-argmax interpolation (implemented)" from "coarse-
-to-fine re-voting (not implemented, planned)", and the impossible ablation
-(vi) is removed rather than left in the results plan.
+## Change history (chronological)
 
 ### v12: ellipse support + a real memory bug found and fixed
 Ellipse is d=5 (x0, y0, rx, ry, phi); shape is now a tuple everywhere
@@ -69,6 +52,48 @@ and should also help parabola/circle at larger scale (128px, bigger batches).
 Also added a bounded LRU cache for stage-2 banks (`bank2_cache_size`,
 default 64) so memory doesn't grow unbounded as training visits more
 distinct anchor bins over an epoch.
+
+### v14: checkpoint-every-epoch + resume, and a paper-vs-code honesty fix
+A long run timing out used to lose all progress (train.py only saved at the
+very end). Now `--save` checkpoints after every epoch, and `--resume
+<path>` loads a checkpoint and continues training for `--epochs` more
+epochs (unlike `--load`, which skips straight to eval). If a run times out,
+rerun with `--resume` on the same save path instead of starting over.
+
+Also: a review correctly caught that Section 3.4 and the Limitations
+paragraph described an "optional refinement stage" (re-voting on a newly
+built finer grid, the coarse-to-fine classical Hough analogue) as if it
+were implemented and ablatable. It isn't -- only cheap soft-argmax
+interpolation over the existing coarse grid is implemented (and that part
+of the review's other claims -- logsumexp pooling, NMS, soft-argmax decode
+-- were verified as genuinely implemented, so the review was right about
+one specific thing and overstated on the rest). Fixed: the paper now
+clearly separates "soft-argmax interpolation (implemented)" from "coarse-
+to-fine re-voting (not implemented, planned)", and the impossible ablation
+(vi) is removed rather than left in the results plan.
+
+### v16: figures
+Two kinds, handled differently -- an image generator (DALL-E-style) is the
+wrong tool for either; both are built as real matplotlib/vector graphics.
+
+- `code/make_schematic_figure.py`: conceptual dense-vs-factorized
+  accumulator diagram, no data dependency, numerically matched to the
+  measured Table 1 numbers (26.9x, 152KB vs 4MB). Already generated and
+  inserted into the paper (Figure 1, Section 3.4).
+- `code/make_figures.py`: data-driven figures that MUST come from a real
+  trained checkpoint -- Stage-1 accumulator heatmap (with GT and detected
+  peaks marked), Stage-2 shape profile at the top peak, and a qualitative
+  image with ground truth vs. detected curves overlaid. Validated the
+  script runs cleanly (parabola and ellipse, including the multi-dim shape
+  path) against throwaway smoke checkpoints, but that output was NOT used
+  in the paper -- it's an untrained toy model, not a real result, same
+  discipline as everywhere else in this project. Run it yourself against a
+  real checkpoint:
+  `python make_figures.py --family parabola --load parabola_hard.pt --idx 3`
+  (pick --idx to find a representative example; --thresh may need lowering
+  if no detections show up at the default 0.25). Copy the three PNGs it
+  produces into paper/figures/, then uncomment the placeholder figure block
+  in main.tex (search "Qualitative results") and add one more per family.
 
 ## Validation protocol (run in this order, keep all real numbers)
 1. `python train.py --family parabola --size 64 --epochs 10 --n-train 1000

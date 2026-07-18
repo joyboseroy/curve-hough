@@ -46,34 +46,33 @@
 \newlabel{tab:memory_complexity}{{1}{4}{Measured accumulator memory (float32), dense vs.\ factorized, at the configuration used for all main-text results ($C=32$, $B=32$ bins/axis, $d=3$)}{table.1}{}}
 \citation{zhao2021deep}
 \citation{zhao2021deep}
-\citation{zhao2021deep}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Dense accumulator (left) vs.\ the factorized cascade (right), drawn to scale with the measured element counts of Table~\ref {tab:memory_complexity}. The dense accumulator materializes every $(\text  {anchor}, \text  {shape})$ combination at once; the cascade computes a coarse 2D anchor map, retains a handful of peaks, and instantiates a dense shape accumulator only at each retained peak.}}{5}{figure.1}\protected@file@percent }
+\newlabel{fig:accumulator_schematic}{{1}{5}{Dense accumulator (left) vs.\ the factorized cascade (right), drawn to scale with the measured element counts of Table~\ref {tab:memory_complexity}. The dense accumulator materializes every $(\text {anchor}, \text {shape})$ combination at once; the cascade computes a coarse 2D anchor map, retains a handful of peaks, and instantiates a dense shape accumulator only at each retained peak}{figure.1}{}}
 \@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces Factorized deep Hough cascade (inference)}}{5}{algorithm.1}\protected@file@percent }
 \newlabel{alg:cascade}{{1}{5}{Stage 2: conditional shape voting}{algorithm.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Training}{5}{subsection.3.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {4}The Curve-EA Score}{5}{section.4}\protected@file@percent }
-\newlabel{sec:metric}{{4}{5}{The Curve-EA Score}{section.4}{}}
 \citation{zhao2021deep}
+\citation{zhao2021deep}
+\@writefile{toc}{\contentsline {section}{\numberline {4}The Curve-EA Score}{6}{section.4}\protected@file@percent }
+\newlabel{sec:metric}{{4}{6}{The Curve-EA Score}{section.4}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {5}Experiments}{6}{section.5}\protected@file@percent }
 \newlabel{sec:experiments}{{5}{6}{Experiments}{section.5}{}}
 \@writefile{toc}{\contentsline {paragraph}{Benchmark.}{6}{section*.4}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Baselines.}{6}{section*.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Results.}{6}{section*.6}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Factorized DHT on parabolas, $64\times 64$, threshold $\tau = 0.55$ (chosen by sweep over $\{0.15,\ldots  ,0.75\}$). Matched curve-EA similarity is reported over Hungarian-matched pairs only ($n$ pairs).}}{6}{table.2}\protected@file@percent }
-\newlabel{tab:parabola_interim}{{2}{6}{Factorized DHT on parabolas, $64\times 64$, threshold $\tau = 0.55$ (chosen by sweep over $\{0.15,\ldots ,0.75\}$). Matched curve-EA similarity is reported over Hungarian-matched pairs only ($n$ pairs)}{table.2}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Factorized DHT on circles, corrupted setting, $64\times 64$, threshold $\tau =0.75$ (best of sweep).}}{6}{table.3}\protected@file@percent }
-\newlabel{tab:circle_interim}{{3}{6}{Factorized DHT on circles, corrupted setting, $64\times 64$, threshold $\tau =0.75$ (best of sweep)}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Factorized DHT on parabolas, $64\times 64$, threshold $\tau = 0.55$ (chosen by sweep over $\{0.15,\ldots  ,0.75\}$). Matched curve-EA similarity is reported over Hungarian-matched pairs only ($n$ pairs).}}{7}{table.2}\protected@file@percent }
+\newlabel{tab:parabola_interim}{{2}{7}{Factorized DHT on parabolas, $64\times 64$, threshold $\tau = 0.55$ (chosen by sweep over $\{0.15,\ldots ,0.75\}$). Matched curve-EA similarity is reported over Hungarian-matched pairs only ($n$ pairs)}{table.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Factorized DHT on circles, corrupted setting, $64\times 64$, threshold $\tau =0.75$ (best of sweep).}}{7}{table.3}\protected@file@percent }
+\newlabel{tab:circle_interim}{{3}{7}{Factorized DHT on circles, corrupted setting, $64\times 64$, threshold $\tau =0.75$ (best of sweep)}{table.3}{}}
+\@writefile{toc}{\contentsline {paragraph}{Qualitative results.}{7}{table.5}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Factorized DHT on ellipses ($d=5$: $x_0, y_0, r_x, r_y, \phi $), $64\times 64$. Thresholds chosen by sweep, best F reported per setting.}}{7}{table.4}\protected@file@percent }
 \newlabel{tab:ellipse_interim}{{4}{7}{Factorized DHT on ellipses ($d=5$: $x_0, y_0, r_x, r_y, \phi $), $64\times 64$. Thresholds chosen by sweep, best F reported per setting}{table.4}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Baselines on the corrupted parabola setting, matched conditions (same $64\times 64$ benchmark, same curve-EA metric). Classical Hough and RANSAC emit a fixed top-4 hypotheses per image (no learned confidence threshold); regression and query are trained for 10 epochs on 1{,}000 images, with detection threshold chosen by sweeping $\{0.3,\ldots  ,0.9\}$ and reporting the best F (Section~\ref {sec:experiments} details the parameter-scale and class-imbalance fix applied to the matching loss before these numbers were produced).}}{7}{table.5}\protected@file@percent }
-\newlabel{tab:baseline_interim}{{5}{7}{Baselines on the corrupted parabola setting, matched conditions (same $64\times 64$ benchmark, same curve-EA metric). Classical Hough and RANSAC emit a fixed top-4 hypotheses per image (no learned confidence threshold); regression and query are trained for 10 epochs on 1{,}000 images, with detection threshold chosen by sweeping $\{0.3,\ldots ,0.9\}$ and reporting the best F (Section~\ref {sec:experiments} details the parameter-scale and class-imbalance fix applied to the matching loss before these numbers were produced)}{table.5}{}}
-\bibstyle{unsrtnat}
-\bibcite{hough1962}{{1}{1962}{{Hough}}{{}}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Baselines on the corrupted parabola setting, matched conditions (same $64\times 64$ benchmark, same curve-EA metric). Classical Hough and RANSAC emit a fixed top-4 hypotheses per image (no learned confidence threshold); regression and query are trained for 10 epochs on 1{,}000 images, with detection threshold chosen by sweeping $\{0.3,\ldots  ,0.9\}$ and reporting the best F (Section~\ref {sec:experiments} details the parameter-scale and class-imbalance fix applied to the matching loss before these numbers were produced).}}{8}{table.5}\protected@file@percent }
+\newlabel{tab:baseline_interim}{{5}{8}{Baselines on the corrupted parabola setting, matched conditions (same $64\times 64$ benchmark, same curve-EA metric). Classical Hough and RANSAC emit a fixed top-4 hypotheses per image (no learned confidence threshold); regression and query are trained for 10 epochs on 1{,}000 images, with detection threshold chosen by sweeping $\{0.3,\ldots ,0.9\}$ and reporting the best F (Section~\ref {sec:experiments} details the parameter-scale and class-imbalance fix applied to the matching loss before these numbers were produced)}{table.5}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {6}Discussion: voting as geometry-constrained attention}{8}{section.6}\protected@file@percent }
 \newlabel{sec:discussion}{{6}{8}{Discussion: voting as geometry-constrained attention}{section.6}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from.}}{8}{table.6}\protected@file@percent }
-\newlabel{tab:attention_compare}{{6}{8}{Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from}{table.6}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {7}Limitations}{8}{section.7}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{8}{section.8}\protected@file@percent }
+\bibstyle{unsrtnat}
+\bibcite{hough1962}{{1}{1962}{{Hough}}{{}}}
 \bibcite{duda1972}{{2}{1972}{{Duda and Hart}}{{}}}
 \bibcite{ballard1981}{{3}{1981}{{Ballard}}{{}}}
 \bibcite{yuen1989ellipse}{{4}{1989}{{Yuen et~al.}}{{}}}
@@ -82,6 +81,10 @@
 \bibcite{illingworth1987}{{7}{1987}{{Illingworth and Kittler}}{{}}}
 \bibcite{torrente2014}{{8}{2014}{{Torrente et~al.}}{{}}}
 \bibcite{zhao2021deep}{{9}{2021}{{Zhao et~al.}}{{}}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from.}}{9}{table.6}\protected@file@percent }
+\newlabel{tab:attention_compare}{{6}{9}{Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from}{table.6}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Limitations}{9}{section.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Conclusion}{9}{section.8}\protected@file@percent }
 \bibcite{lin2020houghpriors}{{10}{2020}{{Lin et~al.}}{{}}}
 \bibcite{houglanenet2023}{{11}{2023}{{Zhang et~al.}}{{}}}
 \bibcite{qi2019votenet}{{12}{2019}{{Qi et~al.}}{{}}}
@@ -91,4 +94,4 @@
 \bibcite{bsnet2023}{{16}{2023}{{Chen et~al.}}{{}}}
 \bibcite{ransac1981}{{17}{1981}{{Fischler and Bolles}}{{}}}
 \bibcite{detr2020}{{18}{2020}{{Carion et~al.}}{{}}}
-\gdef \@abspage@last{9}
+\gdef \@abspage@last{10}
