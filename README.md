@@ -1,8 +1,10 @@
 # Beyond Lines: Factorized Deep Hough Transform for Parametric Curves
 
-Fast-track arXiv paper project. Generalizes the Deep Hough Transform (Zhao et
+Fast-track paper project. Generalizes the Deep Hough Transform (Zhao et
 al., TPAMI 2021) from straight lines to parametric curve families via a
 cascade of low-dimensional, feature-space voting stages.
+
+Paper available at: https://doi.org/10.5281/zenodo.21424983
 
 ## Layout
 - paper/main.tex : full paper skeleton (abstract, method, propositions,
