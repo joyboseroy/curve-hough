@@ -31,7 +31,26 @@ cascade of low-dimensional, feature-space voting stages.
 Smoke tests pass end to end for all three families:
 `python train.py --smoke`, `--family circle --smoke`, `--family ellipse --smoke`
 
-## v12: ellipse support + a real memory bug found and fixed
+## v14: checkpoint-every-epoch + resume, and a paper-vs-code honesty fix
+A long run timing out used to lose all progress (train.py only saved at the
+very end). Now `--save` checkpoints after every epoch, and `--resume
+<path>` loads a checkpoint and continues training for `--epochs` more
+epochs (unlike `--load`, which skips straight to eval). If a run times out,
+rerun with `--resume` on the same save path instead of starting over.
+
+Also: a review correctly caught that Section 3.4 and the Limitations
+paragraph described an "optional refinement stage" (re-voting on a newly
+built finer grid, the coarse-to-fine classical Hough analogue) as if it
+were implemented and ablatable. It isn't -- only cheap soft-argmax
+interpolation over the existing coarse grid is implemented (and that part
+of the review's other claims -- logsumexp pooling, NMS, soft-argmax decode
+-- were verified as genuinely implemented, so the review was right about
+one specific thing and overstated on the rest). Fixed: the paper now
+clearly separates "soft-argmax interpolation (implemented)" from "coarse-
+to-fine re-voting (not implemented, planned)", and the impossible ablation
+(vi) is removed rather than left in the results plan.
+
+### v12: ellipse support + a real memory bug found and fixed
 Ellipse is d=5 (x0, y0, rx, ry, phi); shape is now a tuple everywhere
 (dataset, curve_pixels, build_bank, FactorizedDHT, metrics.curve_ea) instead
 of the scalar it was for parabola/circle -- parabola/circle behavior is
@@ -81,8 +100,9 @@ these runs. Do not paste numbers from any external draft or suggestion.
    (or timing out), which is itself evidence for the paper's motivation.
    Direct regression / DETR-lite queries need their output width widened
    from 4 (x0,y0,shape,presence) to 6 (x0,y0,rx,ry,phi,presence).
-4. Ablations: probe set size m, top-k, max vs mean vs logsumexp pooling,
-   refinement stage on/off.
+4. Ablations: probe set size m, top-k, max vs mean vs logsumexp pooling.
+   (Coarse-to-fine re-voting refinement is not implemented -- see item 9 --
+   so it's future work, not an ablation on the current codebase.)
 5. Occlusion/clutter parametric sweep (0/20/40/60%), not just easy-vs-hard.
 6. Verify two flagged citations in main.tex (algebraic-curve HT + CT
    application; HoughLaneNet and BSNet author lists).
@@ -90,6 +110,11 @@ these runs. Do not paste numbers from any external draft or suggestion.
    dense vs. factorized accumulator (reviewer-requested, conceptual only).
 8. 128x128 scale-up on Colab for final paper numbers (64px numbers so far
    are real but a smaller-scale stand-in).
+9. Coarse-to-fine re-voting refinement (Section 3.4): build a finer local
+   grid around each detection and re-run the vote/gather at that
+   resolution, rather than the soft-argmax interpolation currently
+   implemented. Real implementation work, not yet started; the paper
+   currently describes this honestly as planned, not shipped.
 
 ## Design decisions already made
 - Method core is geometric factorized voting, not learned queries. The

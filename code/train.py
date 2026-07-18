@@ -38,6 +38,9 @@ def main():
     ap.add_argument("--thresh", type=float, default=0.25)
     ap.add_argument("--save", default="")
     ap.add_argument("--load", default="")
+    ap.add_argument("--resume", default="",
+                    help="load weights and continue training for --epochs more "
+                         "epochs (unlike --load, which skips straight to eval)")
     ap.add_argument("--sweep", action="store_true",
                     help="load a checkpoint and report P/R/F across thresholds, no training")
     ap.add_argument("--topk", type=int, default=None,
@@ -64,6 +67,9 @@ def main():
         model.load_state_dict(torch.load(args.load, map_location=dev))
         print(f"loaded {args.load}")
     else:
+        if args.resume:
+            model.load_state_dict(torch.load(args.resume, map_location=dev))
+            print(f"resumed from {args.resume}")
         opt = torch.optim.Adam(model.parameters(), lr=args.lr)
         for ep in range(args.epochs):
             model.train()
@@ -80,9 +86,11 @@ def main():
                 losses.append((l1.item(), l2.item()))
             m = np.mean(losses, axis=0)
             print(f"epoch {ep}: stage1 {m[0]:.4f}  stage2 {m[1]:.4f}")
+            if args.save:
+                torch.save(model.state_dict(), args.save)  # checkpoint every
+                print(f"  checkpoint saved to {args.save}")  # epoch, not just at the end
         if args.save:
-            torch.save(model.state_dict(), args.save)
-            print(f"saved {args.save}")
+            print(f"training complete, final weights in {args.save}")
 
     # evaluation
     model.eval()
