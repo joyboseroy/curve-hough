@@ -33,9 +33,9 @@ def main():
     ap.add_argument("--easy", action="store_true")
     ap.add_argument("--idx", type=int, default=0, help="which test image to visualize")
     ap.add_argument("--thresh", type=float, default=0.25)
-    ap.add_argument("--out", default="..",
-                    help="output dir for the PNGs (default: repo root, one level "
-                         "up from code/ -- convenient when running from Colab)")
+    ap.add_argument("--out", default=".",
+                    help="output dir for the PNGs (default: current directory, "
+                         "same place as your .pt checkpoint files)")
     args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 

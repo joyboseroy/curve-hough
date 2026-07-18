@@ -78,22 +78,23 @@ wrong tool for either; both are built as real matplotlib/vector graphics.
 
 - `code/make_schematic_figure.py`: conceptual dense-vs-factorized
   accumulator diagram, no data dependency, numerically matched to the
-  measured Table 1 numbers (26.9x, 152KB vs 4MB). Already generated and
-  inserted into the paper (Figure 1, Section 3.4).
-- `code/make_figures.py`: data-driven figures that MUST come from a real
-  trained checkpoint -- Stage-1 accumulator heatmap (with GT and detected
-  peaks marked), Stage-2 shape profile at the top peak, and a qualitative
-  image with ground truth vs. detected curves overlaid. Validated the
-  script runs cleanly (parabola and ellipse, including the multi-dim shape
-  path) against throwaway smoke checkpoints, but that output was NOT used
-  in the paper -- it's an untrained toy model, not a real result, same
-  discipline as everywhere else in this project. Run it yourself against a
-  real checkpoint:
-  `python make_figures.py --family parabola --load parabola_hard.pt --idx 3`
-  (pick --idx to find a representative example; --thresh may need lowering
-  if no detections show up at the default 0.25). Copy the three PNGs it
-  produces into paper/figures/, then uncomment the placeholder figure block
-  in main.tex (search "Qualitative results") and add one more per family.
+  measured Table 1 numbers (26.9x, 152KB vs 4MB). Inserted (Figure 1,
+  Section 3.4).
+- `code/make_figures.py`: data-driven figures from a real checkpoint.
+  DONE for parabola (clean fit: anchor peak on the true vertex, sharp
+  Stage-2 profile, near-pixel-tight overlay) and ellipse (a corrupted-
+  setting example that happens to visually explain the robustness gap in
+  Table ellipse_interim: diffuse Stage-1 accumulator, noisy multimodal
+  Stage-2 profile, visibly mislocalized detections). Both sets are now in
+  the paper (Figures qualitative_parabola, qualitative_ellipse).
+  Still worth doing if there's time: a clean/easy ellipse example
+  (`--load ellipse_easy.pt --easy`) alongside the corrupted one, so the
+  paper shows the same clean-vs-corrupted contrast visually that Table
+  ellipse_interim shows numerically. Note the script always writes
+  `<kind>_<family>.png` regardless of which checkpoint was used, so a
+  second ellipse run will silently overwrite the first -- rename the files
+  in between, or add a `--tag` suffix arg before generating a second set.
+  Circle figures not yet generated.
 
 ## Validation protocol (run in this order, keep all real numbers)
 1. `python train.py --family parabola --size 64 --epochs 10 --n-train 1000
