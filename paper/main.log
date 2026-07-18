@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.4.18)  18 JUL 2026 05:04
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.4.18)  18 JUL 2026 05:23
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -180,6 +180,27 @@ Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
 \@lastruleclass=\count279
 \@thisrulewidth=\dimen172
 )
+(/usr/share/texlive/texmf-dist/tex/latex/tools/tabularx.sty
+Package: tabularx 2023/07/08 v2.11c `tabularx' package (DPC)
+
+(/usr/share/texlive/texmf-dist/tex/latex/tools/array.sty
+Package: array 2023/10/16 v2.5g Tabular extension package (FMi)
+\col@sep=\dimen173
+\ar@mcellbox=\box53
+\extrarowheight=\dimen174
+\NC@list=\toks30
+\extratabsurround=\skip56
+\backup@length=\skip57
+\ar@cellbox=\box54
+)
+\TX@col@width=\dimen175
+\TX@old@table=\dimen176
+\TX@old@col=\dimen177
+\TX@target=\dimen178
+\TX@delta=\dimen179
+\TX@cols=\count280
+\TX@ftn=\toks31
+)
 (/usr/share/texlive/texmf-dist/tex/latex/hyperref/hyperref.sty
 Package: hyperref 2024-01-20 v7.01h Hypertext links for LaTeX
 
@@ -224,15 +245,15 @@ Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
 (/usr/share/texlive/texmf-dist/tex/latex/kvoptions/kvoptions.sty
 Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
 ))
-\c@section@level=\count280
+\c@section@level=\count281
 )
 (/usr/share/texlive/texmf-dist/tex/latex/etoolbox/etoolbox.sty
 Package: etoolbox 2020/10/05 v2.5k e-TeX tools for LaTeX (JAW)
-\etb@tempcnta=\count281
+\etb@tempcnta=\count282
 )
-\@linkdim=\dimen173
-\Hy@linkcounter=\count282
-\Hy@pagecounter=\count283
+\@linkdim=\dimen180
+\Hy@linkcounter=\count283
+\Hy@pagecounter=\count284
 
 (/usr/share/texlive/texmf-dist/tex/latex/hyperref/pd1enc.def
 File: pd1enc.def 2024-01-20 v7.01h Hyperref: PDFDocEncoding definition (HO)
@@ -242,7 +263,7 @@ Now handling font encoding PD1 ...
 (/usr/share/texlive/texmf-dist/tex/generic/intcalc/intcalc.sty
 Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
 )
-\Hy@SavedSpaceFactor=\count284
+\Hy@SavedSpaceFactor=\count285
 
 (/usr/share/texlive/texmf-dist/tex/latex/hyperref/puenc.def
 File: puenc.def 2024-01-20 v7.01h Hyperref: PDF Unicode definition (HO)
@@ -256,14 +277,14 @@ Package hyperref Info: Plain pages OFF on input line 4194.
 Package hyperref Info: Backreferencing OFF on input line 4199.
 Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
 Package hyperref Info: Bookmarks ON on input line 4446.
-\c@Hy@tempcnt=\count285
+\c@Hy@tempcnt=\count286
 
 (/usr/share/texlive/texmf-dist/tex/latex/url/url.sty
 \Urlmuskip=\muskip17
 Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
 )
 LaTeX Info: Redefining \url on input line 4784.
-\XeTeXLinkMargin=\dimen174
+\XeTeXLinkMargin=\dimen181
 
 (/usr/share/texlive/texmf-dist/tex/generic/bitset/bitset.sty
 Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
@@ -272,9 +293,9 @@ Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
 Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
 )
 ))
-\Fld@menulength=\count286
-\Field@Width=\dimen175
-\Fld@charsize=\dimen176
+\Fld@menulength=\count287
+\Field@Width=\dimen182
+\Fld@charsize=\dimen183
 Package hyperref Info: Hyper figures OFF on input line 6063.
 Package hyperref Info: Link nesting OFF on input line 6068.
 Package hyperref Info: Hyper index ON on input line 6071.
@@ -287,9 +308,9 @@ Package hyperref Info: PDF/A mode OFF on input line 6093.
 Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
 package with kernel methods
 )
-\Hy@abspage=\count287
-\c@Item=\count288
-\c@Hfootnote=\count289
+\Hy@abspage=\count288
+\c@Item=\count289
+\c@Hfootnote=\count290
 )
 Package hyperref Info: Driver (autodetected): hpdftex.
 
@@ -301,8 +322,8 @@ Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend pac
 kage
 with kernel methods
 )
-\Fld@listcount=\count290
-\c@bookmark@seq@number=\count291
+\Fld@listcount=\count291
+\c@bookmark@seq@number=\count292
 
 (/usr/share/texlive/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty
 Package: rerunfilecheck 2022-07-10 v1.10 Rerun checks for auxiliary files (HO)
@@ -313,7 +334,7 @@ Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
 Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
 85.
 )
-\Hy@SectionHShift=\skip56
+\Hy@SectionHShift=\skip58
 )
 (/usr/share/texlive/texmf-dist/tex/latex/algorithms/algorithm.sty
 Package: algorithm 2009/08/24 v0.1 Document Style `algorithm' - floating enviro
@@ -321,17 +342,17 @@ nment
 
 (/usr/share/texlive/texmf-dist/tex/latex/float/float.sty
 Package: float 2001/11/08 v1.3d Float enhancements (AL)
-\c@float@type=\count292
-\float@exts=\toks30
-\float@box=\box53
-\@float@everytoks=\toks31
-\@floatcapt=\box54
+\c@float@type=\count293
+\float@exts=\toks32
+\float@box=\box55
+\@float@everytoks=\toks33
+\@floatcapt=\box56
 )
 (/usr/share/texlive/texmf-dist/tex/latex/base/ifthen.sty
 Package: ifthen 2022/04/13 v1.1d Standard LaTeX ifthen package (DPC)
 )
-\@float@every@algorithm=\toks32
-\c@algorithm=\count293
+\@float@every@algorithm=\toks34
+\c@algorithm=\count294
 )
 (/usr/share/texlive/texmf-dist/tex/latex/algorithmicx/algpseudocode.sty
 Package: algpseudocode 
@@ -340,53 +361,53 @@ Package: algpseudocode
 Package: algorithmicx 2005/04/27 v1.2 Algorithmicx
 
 Document Style algorithmicx 1.2 - a greatly improved `algorithmic' style
-\c@ALG@line=\count294
-\c@ALG@rem=\count295
-\c@ALG@nested=\count296
-\ALG@tlm=\skip57
-\ALG@thistlm=\skip58
-\c@ALG@Lnr=\count297
-\c@ALG@blocknr=\count298
-\c@ALG@storecount=\count299
-\c@ALG@tmpcounter=\count300
-\ALG@tmplength=\skip59
+\c@ALG@line=\count295
+\c@ALG@rem=\count296
+\c@ALG@nested=\count297
+\ALG@tlm=\skip59
+\ALG@thistlm=\skip60
+\c@ALG@Lnr=\count298
+\c@ALG@blocknr=\count299
+\c@ALG@storecount=\count300
+\c@ALG@tmpcounter=\count301
+\ALG@tmplength=\skip61
 )
 Document Style - pseudocode environments for use with the `algorithmicx' style
 ) (/usr/share/texlive/texmf-dist/tex/latex/natbib/natbib.sty
 Package: natbib 2010/09/13 8.31b (PWD, AO)
-\bibhang=\skip60
-\bibsep=\skip61
+\bibhang=\skip62
+\bibsep=\skip63
 LaTeX Info: Redefining \cite on input line 694.
-\c@NAT@ctr=\count301
+\c@NAT@ctr=\count302
 )
-\c@proposition=\count302
+\c@proposition=\count303
 
 (/usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
 File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
-\l__color_backend_stack_int=\count303
-\l__pdf_internal_box=\box55
+\l__color_backend_stack_int=\count304
+\l__pdf_internal_box=\box57
 )
 (./main.aux)
 \openout1 = `main.aux'.
 
-LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
-LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 16.
-LaTeX Font Info:    ... okay on input line 16.
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 17.
+LaTeX Font Info:    ... okay on input line 17.
 
 *geometry* driver: auto-detecting
 *geometry* detected driver: pdftex
@@ -424,17 +445,17 @@ LaTeX Font Info:    ... okay on input line 16.
 
 (/usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
 [Loading MPS to PDF converter (version 2006.09.02).]
-\scratchcounter=\count304
-\scratchdimen=\dimen177
-\scratchbox=\box56
-\nofMPsegments=\count305
-\nofMParguments=\count306
-\everyMPshowfont=\toks33
-\MPscratchCnt=\count307
-\MPscratchDim=\dimen178
-\MPnumerator=\count308
-\makeMPintoPDFobject=\count309
-\everyMPtoPDFconversion=\toks34
+\scratchcounter=\count305
+\scratchdimen=\dimen184
+\scratchbox=\box58
+\nofMPsegments=\count306
+\nofMParguments=\count307
+\everyMPshowfont=\toks35
+\MPscratchCnt=\count308
+\MPscratchDim=\dimen185
+\MPnumerator=\count309
+\makeMPintoPDFobject=\count310
+\everyMPtoPDFconversion=\toks36
 ) (/usr/share/texlive/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
 Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
 
@@ -452,145 +473,149 @@ G,.JBIG2,.JB2,.eps]
 File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
 e
 ))
-Package hyperref Info: Link coloring OFF on input line 16.
+Package hyperref Info: Link coloring OFF on input line 17.
 
 (./main.out) (./main.out)
 \@outlinefile=\write3
 \openout3 = `main.out'.
 
-LaTeX Font Info:    Trying to load font information for U+msa on input line 18.
+LaTeX Font Info:    Trying to load font information for U+msa on input line 19.
 
 
 (/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
 File: umsa.fd 2013/01/14 v3.01 AMS symbols A
 )
-LaTeX Font Info:    Trying to load font information for U+msb on input line 18.
+LaTeX Font Info:    Trying to load font information for U+msb on input line 19.
 
 
 (/usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
 File: umsb.fd 2013/01/14 v3.01 AMS symbols B
 ) [1
 
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3]
-Overfull \hbox (15.80226pt too wide) in paragraph at lines 110--111
-[]\OT1/cmr/bx/n/10.95 Proposition 2 \OT1/cmr/m/n/10.95 (Per-mu-ta-tion in-vari-
-ance of vot-ing)\OT1/cmr/bx/n/10.95 . \OT1/cmr/m/it/10.95 The vot-ing op-er-a-t
-or $\OT1/cmr/bx/n/10.95 Y\OT1/cmr/m/n/10.95 (\OT1/cmr/bx/n/10.95 p\OT1/cmr/m/n/
-10.95 ) = \OMS/cmsy/m/n/10.95 j\OT1/cmr/m/n/10.95 
-(\OT1/cmr/bx/n/10.95 p\OT1/cmr/m/n/10.95 )\OMS/cmsy/m/n/10.95 j[] [][] \OT1/cmr
-/bx/n/10.95 X\OT1/cmr/m/n/10.95 (\OML/cmm/m/it/10.95 i\OT1/cmr/m/n/10.95 )$
- []
-
-[4
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2] [3] [4
 pdfTeX warning (ext4): destination with the same identifier (name{table.1}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.114 
+l.126 
       ]
-<figures/accumulator_schematic.pdf, id=164, 687.89131pt x 313.3028pt>
+<figures/accumulator_schematic.pdf, id=170, 687.89131pt x 313.3028pt>
 File: figures/accumulator_schematic.pdf Graphic file (type pdf)
 <use figures/accumulator_schematic.pdf>
 Package pdftex.def Info: figures/accumulator_schematic.pdf  used on input line 
-119.
+131.
 (pdftex.def)             Requested size: 446.26582pt x 203.25716pt.
 Package hyperref Info: bookmark level for unknown algorithm defaults to 0 on in
-put line 125.
+put line 137.
  [5
-pdfTeX warning (ext4): destination with the same identifier (name{figure.1}) ha
-s been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.146 
-       <./figures/accumulator_schematic.pdf>] [6]
-<figures/stage1_heatmap_ellipse.png, id=314, 332.08064pt x 303.534pt>
-File: figures/stage1_heatmap_ellipse.png Graphic file (type png)
-<use figures/stage1_heatmap_ellipse.png>
-Package pdftex.def Info: figures/stage1_heatmap_ellipse.png  used on input line
- 217.
-(pdftex.def)             Requested size: 150.32504pt x 137.39955pt.
-<figures/stage2_profile_ellipse.png, id=316, 433.62pt x 231.264pt>
-File: figures/stage2_profile_ellipse.png Graphic file (type png)
-<use figures/stage2_profile_ellipse.png>
-Package pdftex.def Info: figures/stage2_profile_ellipse.png  used on input line
- 218.
-(pdftex.def)             Requested size: 150.32504pt x 80.17433pt.
-<figures/qualitative_ellipse.png, id=317, 332.08064pt x 332.08064pt>
-File: figures/qualitative_ellipse.png Graphic file (type png)
-<use figures/qualitative_ellipse.png>
-Package pdftex.def Info: figures/qualitative_ellipse.png  used on input line 21
-9.
-(pdftex.def)             Requested size: 150.32504pt x 150.32166pt.
-<figures/stage1_heatmap_parabola.png, id=322, 332.08064pt x 303.534pt>
-File: figures/stage1_heatmap_parabola.png Graphic file (type png)
-<use figures/stage1_heatmap_parabola.png>
-Package pdftex.def Info: figures/stage1_heatmap_parabola.png  used on input lin
-e 227.
-(pdftex.def)             Requested size: 150.32504pt x 137.39955pt.
-<figures/stage2_profile_parabola.png, id=323, 433.62pt x 231.264pt>
-File: figures/stage2_profile_parabola.png Graphic file (type png)
-<use figures/stage2_profile_parabola.png>
-Package pdftex.def Info: figures/stage2_profile_parabola.png  used on input lin
-e 228.
-(pdftex.def)             Requested size: 150.32504pt x 80.17433pt.
-<figures/qualitative_parabola.png, id=324, 332.08064pt x 332.08064pt>
-File: figures/qualitative_parabola.png Graphic file (type png)
-<use figures/qualitative_parabola.png>
-Package pdftex.def Info: figures/qualitative_parabola.png  used on input line 2
-29.
-(pdftex.def)             Requested size: 150.32504pt x 150.32166pt.
- [7
 pdfTeX warning (ext4): destination with the same identifier (name{table.2}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.254 
+l.162 \begin{equation}
+                      
+pdfTeX warning (ext4): destination with the same identifier (name{figure.1}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.162 \begin{equation}
+                       <./figures/accumulator_schematic.pdf>]
+<figures/benchmark_examples.png, id=303, 629.11035pt x 444.09915pt>
+File: figures/benchmark_examples.png Graphic file (type png)
+<use figures/benchmark_examples.png>
+Package pdftex.def Info: figures/benchmark_examples.png  used on input line 177
+.
+(pdftex.def)             Requested size: 399.29463pt x 281.87106pt.
+ [6] [7
+pdfTeX warning (ext4): destination with the same identifier (name{figure.2}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.233 
       
 pdfTeX warning (ext4): destination with the same identifier (name{table.3}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.254 
-      
+l.233 
+       <./figures/benchmark_examples.png>]
+<figures/stage1_heatmap_ellipse.png, id=332, 332.08064pt x 303.534pt>
+File: figures/stage1_heatmap_ellipse.png Graphic file (type png)
+<use figures/stage1_heatmap_ellipse.png>
+Package pdftex.def Info: figures/stage1_heatmap_ellipse.png  used on input line
+ 236.
+(pdftex.def)             Requested size: 150.32504pt x 137.39955pt.
+<figures/stage2_profile_ellipse.png, id=333, 433.62pt x 231.264pt>
+File: figures/stage2_profile_ellipse.png Graphic file (type png)
+<use figures/stage2_profile_ellipse.png>
+Package pdftex.def Info: figures/stage2_profile_ellipse.png  used on input line
+ 237.
+(pdftex.def)             Requested size: 150.32504pt x 80.17433pt.
+<figures/qualitative_ellipse.png, id=334, 332.08064pt x 332.08064pt>
+File: figures/qualitative_ellipse.png Graphic file (type png)
+<use figures/qualitative_ellipse.png>
+Package pdftex.def Info: figures/qualitative_ellipse.png  used on input line 23
+8.
+(pdftex.def)             Requested size: 150.32504pt x 150.32166pt.
+ [8
 pdfTeX warning (ext4): destination with the same identifier (name{table.4}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.254 
-      ] [8
-pdfTeX warning (ext4): destination with the same identifier (name{figure.2}) ha
-s been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.254 
-      
-pdfTeX warning (ext4): destination with the same identifier (name{figure.3}) ha
-s been already used, duplicate ignored
-<argument> ...shipout:D \box_use:N \l_shipout_box 
-                                                  \__shipout_drop_firstpage_...
-l.254 
-       <./figures/stage1_heatmap_ellipse.png> <./figures/stage2_profile_ellipse
-.png> <./figures/qualitative_ellipse.png> <./figures/stage1_heatmap_parabola.pn
-g> <./figures/stage2_profile_parabola.png> <./figures/qualitative_parabola.png>
-]
-Overfull \hbox (74.25981pt too wide) in paragraph at lines 266--277
- [][] 
- []
-
-[9
+l.243 \paragraph
+                {Qualitative results.}
 pdfTeX warning (ext4): destination with the same identifier (name{table.5}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.283 
-      ] [10
+l.243 \paragraph
+                {Qualitative results.}
+pdfTeX warning (ext4): destination with the same identifier (name{figure.3}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.243 \paragraph
+                {Qualitative results.} <./figures/stage1_heatmap_ellipse.png> <
+./figures/stage2_profile_ellipse.png> <./figures/qualitative_ellipse.png>]
+<figures/stage1_heatmap_parabola.png, id=348, 332.08064pt x 303.534pt>
+File: figures/stage1_heatmap_parabola.png Graphic file (type png)
+<use figures/stage1_heatmap_parabola.png>
+Package pdftex.def Info: figures/stage1_heatmap_parabola.png  used on input lin
+e 246.
+(pdftex.def)             Requested size: 150.32504pt x 137.39955pt.
+<figures/stage2_profile_parabola.png, id=349, 433.62pt x 231.264pt>
+File: figures/stage2_profile_parabola.png Graphic file (type png)
+<use figures/stage2_profile_parabola.png>
+Package pdftex.def Info: figures/stage2_profile_parabola.png  used on input lin
+e 247.
+(pdftex.def)             Requested size: 150.32504pt x 80.17433pt.
+<figures/qualitative_parabola.png, id=350, 332.08064pt x 332.08064pt>
+File: figures/qualitative_parabola.png Graphic file (type png)
+<use figures/qualitative_parabola.png>
+Package pdftex.def Info: figures/qualitative_parabola.png  used on input line 2
+48.
+(pdftex.def)             Requested size: 150.32504pt x 150.32166pt.
+
+[9
+pdfTeX warning (ext4): destination with the same identifier (name{figure.4}) ha
+s been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.275 
+      
 pdfTeX warning (ext4): destination with the same identifier (name{table.6}) has
  been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.298 ...tem[Lin et~al.(2020)]{lin2020houghpriors}
-                                                   Y.~Lin, S.~L. Pintea, and...
-] [11] (./main.aux)
+l.275 
+       <./figures/stage1_heatmap_parabola.png> <./figures/stage2_profile_parabo
+la.png> <./figures/qualitative_parabola.png>] [10
+pdfTeX warning (ext4): destination with the same identifier (name{table.7}) has
+ been already used, duplicate ignored
+<argument> ...shipout:D \box_use:N \l_shipout_box 
+                                                  \__shipout_drop_firstpage_...
+l.305 
+      ] [11] [12] (./main.aux)
  ***********
 LaTeX2e <2023-11-01> patch level 1
 L3 programming layer <2024-01-22>
@@ -599,38 +624,41 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 080300C537ABA95FC0B279C7C0A8243C;1985.
  ) 
 Here is how much of TeX's memory you used:
- 11487 strings out of 476106
- 174837 string characters out of 5793933
- 1941975 words of memory out of 5000000
- 33277 multiletter control sequences out of 15000+600000
- 570183 words of font info for 82 fonts, out of 8000000 for 9000
+ 11637 strings out of 476106
+ 177217 string characters out of 5793933
+ 1939975 words of memory out of 5000000
+ 33413 multiletter control sequences out of 15000+600000
+ 572273 words of font info for 90 fonts, out of 8000000 for 9000
  59 hyphenation exceptions out of 8191
- 75i,10n,79p,2512b,572s stack positions out of 10000i,1000n,20000p,200000b,200000s
- </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk></u
-sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/sha
-re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/tex
-live/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx8.pfb></usr/share/texlive/te
-xmf-dist/fonts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/texmf-di
-st/fonts/type1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fon
-ts/type1/public/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type
-1/public/amsfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
-c/amsfonts/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
-nts/cm/cmr10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/
-cmr12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.p
-fb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr
-/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/share/t
-exlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/t
-exmf-dist/fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dis
-t/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/font
-s/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1
-/public/amsfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
-c/amsfonts/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
-onts/symbols/msam10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
-nts/symbols/msbm10.pfb>
-Output written on main.pdf (11 pages, 657223 bytes).
+ 75i,12n,79p,2498b,576s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ </root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm1095.600pk> </
+root/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm0600.600pk> </root/
+.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm0800.600pk></usr/share/t
+exlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx10.pfb></usr/share/texlive
+/texmf-dist/fonts/type1/public/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf
+-dist/fonts/type1/public/amsfonts/cm/cmbx8.pfb></usr/share/texlive/texmf-dist/f
+onts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texlive/texmf-dist/fonts/t
+ype1/public/amsfonts/cm/cmmi10.pfb></usr/share/texlive/texmf-dist/fonts/type1/p
+ublic/amsfonts/cm/cmmi6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/a
+msfonts/cm/cmmi7.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts
+/cm/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr
+10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb>
+</usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/s
+hare/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/tex
+live/texmf-dist/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/share/texlive/tex
+mf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/texmf-dist/
+fonts/type1/public/amsfonts/cm/cmr9.pfb></usr/share/texlive/texmf-dist/fonts/ty
+pe1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/pu
+blic/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/am
+sfonts/cm/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts
+/cm/cmtt12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cm
+tt9.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msam
+10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/symbols/msbm1
+0.pfb>
+Output written on main.pdf (12 pages, 732964 bytes).
 PDF statistics:
- 479 PDF objects out of 1000 (max. 8388607)
- 305 compressed objects within 4 object streams
- 68 named destinations out of 1000 (max. 500000)
- 140 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 505 PDF objects out of 1000 (max. 8388607)
+ 324 compressed objects within 4 object streams
+ 70 named destinations out of 1000 (max. 500000)
+ 145 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -4,20 +4,21 @@
 \usepackage{graphicx}
 \graphicspath{{figures/}}
 \usepackage{booktabs}
+\usepackage{tabularx}
 \usepackage{hyperref}
 \usepackage{algorithm,algpseudocode}
 \usepackage[numbers]{natbib}
 \newtheorem{proposition}{Proposition}
 
 \title{Beyond Lines: A Factorized Deep Hough Transform\\for Parametric Curve Detection}
-\author{Joy Bose\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
+\author{Joy Bose\thanks{Code, benchmark generator, and trained configurations: \url{https://github.com/joyboseroy/curve-hough}}\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
 \date{}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-The Deep Hough Transform (DHT) embeds classical Hough voting inside a convolutional network and achieves accurate, real-time detection of semantic straight lines by aggregating learned features along candidate lines into a two-dimensional parameter space. Extending this idea beyond lines has remained open: for a curve family with $d$ parameters the accumulator grows as $O(B^{d})$ in the number of bins $B$, making the direct generalization intractable in memory and computation for even quadratic curves. We propose a factorized deep Hough transform that makes feature-space voting practical for parametric curves. Our method decomposes the parameter space into a cascade of low-dimensional voting stages: a coarse marginal accumulator localizes a curve anchor (for example the vertex of a parabola or the center of a circle), and conditional accumulators, instantiated only at detected anchor peaks, resolve the remaining shape parameters. All stages aggregate deep features rather than edge pixels and are trained end to end with a peak detection loss in each accumulator. We further introduce a curve agreement score that extends the EA line similarity metric to arbitrary parametric curves, and a synthetic benchmark with noise, occlusion, and distractor structures covering parabolas, circles, and ellipses ($d=5$). Against classical Hough voting, RANSAC, direct parameter regression, and a DETR-style hypothesis-query baseline on a controlled synthetic benchmark, we find that methods with an explicit geometric hypothesis space, whether classical (RANSAC, dense Hough) or deep (ours), substantially outperform free-form learned parameter prediction under occlusion and clutter, while factorized voting remains competitive with classical geometric methods at low parameter dimensionality and, by construction, extends to dimensionalities where classical minimal-point solvers and dense accumulators are no longer tractable. On ellipses, clean-setting accuracy matches or exceeds the lower-dimensional families, but robustness to occlusion and clutter degrades markedly faster than at $d=3$, an honest limitation of the current cascade that we analyze and connect to a planned coarse-to-fine refinement stage. We conclude with an analysis that interprets Hough voting as cross-attention whose attention map is fixed by geometry rather than learned, which situates our method and suggests learned hypothesis spaces as a natural extension. Code and the benchmark are released.
+The Deep Hough Transform (DHT) embeds classical Hough voting inside a convolutional network and achieves accurate, real-time detection of semantic straight lines by aggregating learned features along candidate lines into a two-dimensional parameter space. Extending this idea beyond lines has remained open: for a curve family with $d$ parameters the accumulator grows as $O(B^{d})$ in the number of bins $B$, making the direct generalization intractable in memory and computation for even quadratic curves. We propose a factorized deep Hough transform that makes feature-space voting practical for parametric curves. Our method decomposes the parameter space into a cascade of low-dimensional voting stages: a coarse marginal accumulator localizes a curve anchor (for example the vertex of a parabola or the center of a circle), and conditional accumulators, instantiated only at detected anchor peaks, resolve the remaining shape parameters. All stages aggregate deep features rather than edge pixels and are trained end to end with a peak detection loss in each accumulator. We further introduce a curve agreement score that extends the EA line similarity metric to arbitrary parametric curves, and a synthetic benchmark with noise, occlusion, and distractor structures covering parabolas, circles, and ellipses ($d=5$). Against classical Hough voting, RANSAC, direct parameter regression, and a DETR-style hypothesis-query baseline on this benchmark, we find that the geometric-hypothesis-space methods we evaluate, classical (RANSAC, dense Hough) and deep (ours) alike, substantially outperform the regression and query-based baselines under occlusion and clutter, while factorized voting remains competitive with the classical geometric methods at low parameter dimensionality and, by construction, extends to dimensionalities where classical minimal-point solvers and dense accumulators are no longer tractable. On ellipses, clean-setting accuracy matches or exceeds the lower-dimensional families, but robustness to occlusion and clutter degrades markedly faster than at $d=3$, an honest limitation of the current cascade that we analyze and connect to a planned coarse-to-fine refinement stage. We conclude with an analysis that interprets Hough voting as cross-attention whose attention map is fixed by geometry rather than learned, which situates our method and suggests learned hypothesis spaces as a natural extension. Code and the benchmark are released.
 \end{abstract}
 
 \section{Introduction}
@@ -104,13 +105,24 @@ Stage 2 $O(k B_s)$            & 6{,}144      & 24.00 KB \\
 \end{tabular}
 \end{table}
 
-The factorized cascade uses 26.9$\times$ less memory than the dense accumulator at $d=3$; by Proposition~1 this ratio grows with $d$, since the dense term scales as $B^{d}$ while the factorized term stays $O(B^{d_1} + kB^{d_2})$ for any fixed anchor dimensionality $d_1$.
+The factorized cascade uses 26.9$\times$ less memory than the dense accumulator at $d=3$; by Proposition~1 this ratio grows with $d$, since the dense term scales as $B^{d}$ while the factorized term stays $O(B^{d_1} + kB^{d_2})$ for any fixed anchor dimensionality $d_1$. Table~\ref{tab:memory_scaling} measures this directly at our actual ellipse configuration ($d=5$): the dense accumulator's arithmetic size (not instantiated -- doing so is precisely the impracticality in question) grows $1{,}024\times$ from $d=3$ to $d=5$ at fixed $B=32$, from 4.00\,MB to 4.00\,GB, exceeding typical single-GPU memory outright; the factorized cascade's measured size grows only $1.6\times$, from 152\,KB to 236\,KB, because $d_1=2$ (the anchor) is fixed regardless of $d$ and only $d_2$ (the shape) grows with the family.
 
-\begin{proposition}[Permutation invariance of voting]
-The voting operator $\mathbf{Y}(\mathbf{p}) = |\Omega(\mathbf{p})|^{-1} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i)$ is invariant to any permutation of the pixel indices within $\Omega(\mathbf{p})$. \emph{Proof.} Summation and the cardinality-normalizing constant are both invariant to the order in which elements of a finite index set are enumerated; $\Omega(\mathbf{p})$ is a set, so Equation~\ref{eq:vote} depends only on the multiset of feature values $\{\mathbf{X}(i) : i \in \Omega(\mathbf{p})\}$, not their traversal order. $\blacksquare$
-\end{proposition}
+\begin{table}[htbp]
+\centering
+\caption{Accumulator memory scaling from $d=3$ (parabola) to $d=5$ (ellipse) at fixed $B=32$, $C=32$. Dense sizes for $d=5$ are computed arithmetically, not instantiated.}
+\label{tab:memory_scaling}
+\small
+\begin{tabular}{lccc}
+\toprule
+& \textbf{Dense $O(B^{d})$} & \textbf{Factorized (measured)} & \textbf{Reduction} \\
+\midrule
+$d=3$ (parabola) & 4.00 MB & 152 KB & 26.9$\times$ \\
+$d=5$ (ellipse)  & 4.00 GB & 236 KB & 17{,}772.5$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-This property is what allows the gather-and-mean implementation (a fixed index bank per candidate curve) to be computed with no ordering assumptions and no positional encoding, unlike a learned-attention alternative over the same support.
+\emph{Remark (permutation invariance).} The voting operator $\mathbf{Y}(\mathbf{p}) = |\Omega(\mathbf{p})|^{-1} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i)$ is invariant to any permutation of the pixel indices within $\Omega(\mathbf{p})$, immediately from summation and the cardinality-normalizing constant both being order-independent over the finite index set $\Omega(\mathbf{p})$: Equation~\ref{eq:vote} depends only on the multiset $\{\mathbf{X}(i) : i \in \Omega(\mathbf{p})\}$, not traversal order. This property is what allows the gather-and-mean implementation (a fixed index bank per candidate curve) to be computed with no ordering assumptions and no positional encoding, unlike a learned-attention alternative over the same support.
 
 Algorithm~\ref{alg:cascade} summarizes training-time inference for one image; index banks $\Omega(\cdot)$ are precomputed once per family and resolution and reused across all images.
 
@@ -158,7 +170,14 @@ where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence
 
 \section{Experiments}
 \label{sec:experiments}
-\paragraph{Benchmark.} Images of size $128 \times 128$ containing one to three curves from a family (parabolas; circles), rendered with stroke width 2, plus: Gaussian pixel noise, random occluding rectangles removing up to 40\% of curve support, and distractor line segments. Splits: 8,000 train, 1,000 val, 1,000 test per family. % TODO: exact generation parameters, examples figure.
+\paragraph{Benchmark.} Images of size $128 \times 128$ (main-text results below use $64 \times 64$; see Limitations) containing one to three curves from a family (parabolas, circles, ellipses), rendered with stroke width 2, plus: Gaussian pixel noise, random occluding rectangles removing up to 40\% of curve support, and distractor line segments. Splits: 8,000 train, 1,000 val, 1,000 test per family. Figure~\ref{fig:benchmark_examples} shows representative clean and corrupted examples for each family.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/benchmark_examples.png}
+\caption{Representative benchmark images, clean (top) and corrupted (bottom: noise, occlusion, distractor segments), for each curve family.}
+\label{fig:benchmark_examples}
+\end{figure}
 
 \paragraph{Baselines.} (i) Classical: Sobel edges plus dense classical Hough voting at matched quantization; (ii) RANSAC curve fitting on edge points; (iii) direct regression: same encoder, MLP head predicting up to three parameter vectors with permutation-matched L1 loss; (iv) hypothesis queries: same encoder, DETR-style decoder with $K$ learned queries and Hungarian matching, sized to match our head's parameter count.
 
@@ -263,7 +282,7 @@ Equation~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathb
 \caption{Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from.}
 \label{tab:attention_compare}
 \small
-\begin{tabular}{lll}
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
 \toprule
 & \textbf{Deep Hough voting (this work)} & \textbf{Transformer query decoding (DETR-lite)} \\
 \midrule
@@ -273,16 +292,18 @@ Support pattern & Sparse, exactly the curve's pixels & Dense, over all tokens \\
 Accumulator & Interpretable: indexed by $(\mathbf{a}, \mathbf{s})$ & Latent, not directly indexed by geometry \\
 Failure mode under clutter & Degrades with the evidence itself & Degrades with query-token similarity noise \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 This view suggests a spectrum: fixed geometric attention (this work), attention restricted to geometric supports but with learned per-pixel weights, and fully learned hypothesis embeddings that dispense with explicit parameterizations. The latter would extend voting beyond geometry, to structured hypothesis spaces such as graph motifs, which we leave to future work.
 
 \section{Limitations}
-Our benchmark is synthetic; transfer to natural and medical images is untested. The factorization requires a spatially meaningful anchor, which exists for conics and vertex-form polynomials but not obviously for every family. Stage 2 conditions on stage 1 peaks, so anchor misses are currently unrecoverable; the coarse-to-fine re-voting refinement described but not yet implemented in Section~\ref{sec:method} is the most direct planned mitigation.
+Our benchmark is synthetic; transfer to natural and medical images is untested. All main-text results are at $64 \times 64$ resolution rather than the $128 \times 128$ the benchmark supports, a smaller-scale stand-in adopted for compute budget during rapid iteration; qualitative trends (parabola vs.\ ellipse degradation, geometric vs.\ free-form baselines) are expected to hold at $128 \times 128$ but have not yet been confirmed there. The factorization requires a spatially meaningful anchor, which exists for conics and vertex-form polynomials but not obviously for every family. Stage 2 conditions on stage 1 peaks, so anchor misses are currently unrecoverable; the coarse-to-fine re-voting refinement described but not yet implemented in Section~\ref{sec:method} is the most direct planned mitigation.
 
 \section{Conclusion}
 We generalized the Deep Hough Transform beyond straight lines with a factorized cascade of feature-space voting stages, an extended agreement metric, and a controlled benchmark, and showed that explicit geometric voting remains competitive with, and under clutter preferable to, learned query decoders at matched compute.
+
+The present work should be viewed as establishing the feasibility of differentiable Hough voting beyond straight lines, evidenced concretely by the $1{,}024\times$ vs.\ $1.6\times$ memory scaling gap between dense and factorized accumulators from $d=3$ to $d=5$ (Table~\ref{tab:memory_scaling}), rather than as claiming state-of-the-art curve detection. The central contribution is the factorized voting formulation itself, which lets an end-to-end feature-space Hough transform's computational cost scale with conditional parameter subspaces instead of the full parameter dimensionality. We hope this provides a foundation for future learned voting architectures and higher-dimensional geometric hypothesis spaces.
 
 \bibliographystyle{unsrtnat}
 \begin{thebibliography}{99}

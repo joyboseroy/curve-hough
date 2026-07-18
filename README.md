@@ -85,6 +85,54 @@ wrong tool for either; both are built as real matplotlib/vector graphics.
   Stage-2 profile, near-pixel-tight overlay) and ellipse (a corrupted-
   setting example that happens to visually explain the robustness gap in
   Table ellipse_interim: diffuse Stage-1 accumulator, noisy multimodal
+  Stage-2 profile, visibly mislocalized detections). Both sets are in the
+  paper (Figures qualitative_parabola, qualitative_ellipse). Circle figures
+  not yet generated. A clean/easy ellipse example alongside the corrupted
+  one is still worth adding for visual contrast.
+
+### v21: review triage -- softened claims, demoted Prop 2, two new real figures/tables
+Actioned (all cheap, no training needed, everything real):
+- Abstract's broadest claim scoped to "the baselines evaluated" rather than
+  an unqualified "free-form learned parameter prediction" (still true, less
+  sweeping).
+- Proposition 2 (permutation invariance) demoted from a numbered proposition
+  to a prose remark -- a reviewer correctly noted it's an immediate
+  consequence of averaging over a set, not proposition-worthy.
+- NEW: `code/measure_memory.py` now also measures the real ellipse (d=5)
+  accumulator and computes the dense-d=5 arithmetic size (not instantiated
+  -- 4GB, that's the point). Real result: dense grows 1,024x from d=3 to
+  d=5 at fixed B=32 (4MB -> 4GB), factorized grows only 1.6x (152KB ->
+  236KB). This is a genuinely strong, free empirical answer to "does the
+  tractability argument hold as dimensionality grows" -- added as
+  Table memory_scaling and referenced from the new Conclusion paragraph.
+- NEW: `code/make_benchmark_examples.py` -- clean vs. corrupted example
+  grid across all three families, pure generator output, no checkpoint
+  needed. Inserted early in Experiments (Figure benchmark_examples) per
+  reviewer request.
+- Fixed a second stale "parabolas and circles" mention in the Experiments
+  benchmark paragraph (missed ellipse the first time this was fixed).
+- Added the 64px-vs-128px scale caveat to Limitations (was referenced but
+  never actually stated).
+- Added a scoping paragraph to the Conclusion: this establishes feasibility
+  of factorized voting beyond lines, not state-of-the-art curve detection.
+
+NOT actioned (real experiments the review asked for; tracked in Remaining
+work below, not faked):
+- Pooling ablation (max/mean/logsumexp), top-k ablation.
+- A demonstration that coarse-to-fine refinement recovers ellipse's lost
+  robustness -- the refinement itself isn't implemented yet (item 9).
+Two kinds, handled differently -- an image generator (DALL-E-style) is the
+wrong tool for either; both are built as real matplotlib/vector graphics.
+
+- `code/make_schematic_figure.py`: conceptual dense-vs-factorized
+  accumulator diagram, no data dependency, numerically matched to the
+  measured Table 1 numbers (26.9x, 152KB vs 4MB). Inserted (Figure 1,
+  Section 3.4).
+- `code/make_figures.py`: data-driven figures from a real checkpoint.
+  DONE for parabola (clean fit: anchor peak on the true vertex, sharp
+  Stage-2 profile, near-pixel-tight overlay) and ellipse (a corrupted-
+  setting example that happens to visually explain the robustness gap in
+  Table ellipse_interim: diffuse Stage-1 accumulator, noisy multimodal
   Stage-2 profile, visibly mislocalized detections). Both sets are now in
   the paper (Figures qualitative_parabola, qualitative_ellipse).
   Still worth doing if there's time: a clean/easy ellipse example
