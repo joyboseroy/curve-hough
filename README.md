@@ -66,8 +66,14 @@ these runs. Do not paste numbers from any external draft or suggestion.
 
 ## Remaining work (ordered, working through one at a time)
 1. DONE: ellipse family support (dataset, model, metric) + memory fix.
-2. NEXT: full ellipse training run (parabola/circle protocol above,
-   --family ellipse), then threshold sweep + diag, same as parabola/circle.
+2. DONE: ellipse easy/clean training run. Best F 0.681 @ thresh=0.55
+   (P 0.690, R 0.672), losses converged cleanly, detection counts track GT
+   closely (no over/under-detection). Notably beats parabola's own easy
+   number (F 0.650) despite ellipse's larger 5-parameter space -- good
+   evidence the factorization scales.
+   NEXT: ellipse hard-setting run (same protocol, drop --easy):
+   `python train.py --family ellipse --size 64 --epochs 10 --n-train 1000
+   --n-test 200 --save ellipse_hard.pt --sweep`
 3. Ellipse baselines: RANSAC has a closed-form 5-point conic fit (real,
    worth implementing properly, not a stub); classical dense Hough at d=5
    is likely impractical at any reasonable resolution -- probably worth

@@ -156,7 +156,7 @@ where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence
 
 \paragraph{Results.} We report, per family and corruption level: curve-EA average precision, recall, and F-measure (Hungarian-matched, thresholds swept as in \citet{zhao2021deep}); measured accumulator memory, dense $O(B^{d})$ versus our $O(B^{d_1} + kB^{d_2})$ (Proposition 1), including a no-factorization control that we expect to hit memory or runtime limits at $B \geq 32$ for $d=3$; and the following ablations, each varying one factor with the rest fixed at the main-result setting: (i) Stage-1 pooling, max vs.\ mean vs.\ log-sum-exp; (ii) probe set size $m \in \{4, 8, 16, 32\}$; (iii) retained anchor peaks $k \in \{1, 2, 4, 8\}$; (iv) additive noise level $\sigma_n \in \{0, 0.1, 0.2, 0.4\}$; (v) occlusion fraction $\in \{0, 0.2, 0.4, 0.6\}$; (vi) with vs.\ without the coarse-to-fine refinement stage.
 
-Table~\ref{tab:parabola_interim} reports measured results for our method on the parabola family at $64 \times 64$ resolution, at both the standard corrupted setting (noise, occlusion, up to 3 distractor segments, 1--3 curves per image) and a clean control (no corruption, exactly one curve per image), both evaluated over 200 test images. Table~\ref{tab:circle_interim} reports the corrupted setting for circles at the same resolution (threshold chosen by the same sweep protocol). Table~\ref{tab:baseline_interim} reports the four baselines on the corrupted parabola setting. % TODO: circle clean control, 128x128 scale-up, ablations i-vi.
+Table~\ref{tab:parabola_interim} reports measured results for our method on the parabola family at $64 \times 64$ resolution, at both the standard corrupted setting (noise, occlusion, up to 3 distractor segments, 1--3 curves per image) and a clean control (no corruption, exactly one curve per image), both evaluated over 200 test images. Table~\ref{tab:circle_interim} reports the corrupted setting for circles at the same resolution (threshold chosen by the same sweep protocol). Table~\ref{tab:baseline_interim} reports the four baselines on the corrupted parabola setting. Table~\ref{tab:ellipse_interim} reports a first result for the higher-dimensional ellipse family ($d=5$), clean control only so far. % TODO: ellipse corrupted setting, ellipse baselines, 128x128 scale-up, ablations i-vi.
 
 \begin{table}[htbp]
 \centering
@@ -186,6 +186,22 @@ Corrupted (main) & 0.546 & 0.521 & 0.533 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Factorized DHT on ellipses ($d=5$: $x_0, y_0, r_x, r_y, \phi$), clean control, $64\times64$, threshold $\tau=0.55$ (best of sweep). Corrupted setting pending.}
+\label{tab:ellipse_interim}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Setting} & \textbf{P} & \textbf{R} & \textbf{F} \\
+\midrule
+Clean control & 0.690 & 0.672 & 0.681 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Notably, the ellipse clean-control F (0.681) exceeds the parabola clean-control F (0.650, Table~\ref{tab:parabola_interim}) despite ellipse's substantially larger parameter space ($d=5$ vs.\ $d=3$) and 3-dimensional shape accumulator (vs.\ 1-dimensional for parabola and circle); we take this as preliminary evidence that the factorization's accuracy does not degrade with dimensionality on its own, though the corrupted-setting and baseline comparisons at $d=5$ (Section~\ref{sec:experiments}, remaining work) are needed to test this claim under the conditions that matter for the paper's central argument. % TODO: ellipse corrupted setting, ellipse baselines (RANSAC 5-point conic fit is the key comparison).
 
 \begin{table}[htbp]
 \centering
