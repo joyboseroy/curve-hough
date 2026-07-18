@@ -89,10 +89,16 @@ these runs. Do not paste numbers from any external draft or suggestion.
    (P 0.690, R 0.672), losses converged cleanly, detection counts track GT
    closely (no over/under-detection). Notably beats parabola's own easy
    number (F 0.650) despite ellipse's larger 5-parameter space -- good
-   evidence the factorization scales.
-   NEXT: ellipse hard-setting run (same protocol, drop --easy):
-   `python train.py --family ellipse --size 64 --epochs 10 --n-train 1000
-   --n-test 200 --save ellipse_hard.pt --sweep`
+   evidence the factorization scales for clean-setting accuracy.
+   DONE: ellipse hard-setting run. Best F 0.329 @ thresh=0.35 (P 0.350,
+   R 0.311) -- clean-to-corrupted drop is 0.352 (51.7% relative), nearly
+   3x parabola's drop (0.125, 19.2% relative). Real, honest finding: ellipse
+   is tractable and accurate when clean but degrades much faster under
+   occlusion/clutter than lower-d families -- makes sense (occluding an arc
+   constrains a joint (rx,ry,phi) far more weakly than a single radius).
+   Written up in the paper as a genuine limitation, not smoothed over.
+   Both runs now in the paper (Table: ellipse_interim) with the
+   clean-vs-corrupted comparison spelled out.
 3. Ellipse baselines: RANSAC has a closed-form 5-point conic fit (real,
    worth implementing properly, not a stub); classical dense Hough at d=5
    is likely impractical at any reasonable resolution -- probably worth
