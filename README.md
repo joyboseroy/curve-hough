@@ -1,6 +1,6 @@
 # Beyond Lines: Factorized Deep Hough Transform for Parametric Curves
 
-Fast-track arXiv paper project. Generalizes the Deep Hough Transform (Zhao et
+Generalizes the Deep Hough Transform (Zhao et
 al., TPAMI 2021) from straight lines to parametric curve families via a
 cascade of low-dimensional, feature-space voting stages.
 
@@ -60,21 +60,8 @@ very end). Now `--save` checkpoints after every epoch, and `--resume
 epochs (unlike `--load`, which skips straight to eval). If a run times out,
 rerun with `--resume` on the same save path instead of starting over.
 
-Also: a review correctly caught that Section 3.4 and the Limitations
-paragraph described an "optional refinement stage" (re-voting on a newly
-built finer grid, the coarse-to-fine classical Hough analogue) as if it
-were implemented and ablatable. It isn't -- only cheap soft-argmax
-interpolation over the existing coarse grid is implemented (and that part
-of the review's other claims -- logsumexp pooling, NMS, soft-argmax decode
--- were verified as genuinely implemented, so the review was right about
-one specific thing and overstated on the rest). Fixed: the paper now
-clearly separates "soft-argmax interpolation (implemented)" from "coarse-
-to-fine re-voting (not implemented, planned)", and the impossible ablation
-(vi) is removed rather than left in the results plan.
-
 ### v16: figures
-Two kinds, handled differently -- an image generator (DALL-E-style) is the
-wrong tool for either; both are built as real matplotlib/vector graphics.
+Two kinds
 
 - `code/make_schematic_figure.py`: conceptual dense-vs-factorized
   accumulator diagram, no data dependency, numerically matched to the
@@ -143,19 +130,6 @@ wrong tool for either; both are built as real matplotlib/vector graphics.
   second ellipse run will silently overwrite the first -- rename the files
   in between, or add a `--tag` suffix arg before generating a second set.
   Circle figures not yet generated.
-
-## Validation protocol (run in this order, keep all real numbers)
-1. `python train.py --family parabola --size 64 --epochs 10 --n-train 1000
-   --n-test 200 --easy`  -> algorithm sanity: expect high F (0.8+). If not,
-   debug before anything else.
-2. Same without --easy -> the honest hard-setting number.
-3. Then circles, then baselines, then 128 px on Colab for the paper table.
-4. Ellipse: same protocol, family=ellipse. Not yet run at full scale --
-   next thing to do. Ellipse construction/training is slower per-step than
-   parabola/circle (bigger probe/dense grids), budget more wall-clock time.
-
-IMPORTANT: results tables in the paper must contain only numbers produced by
-these runs. Do not paste numbers from any external draft or suggestion.
 
 ## Remaining work (ordered, working through one at a time)
 1. DONE: ellipse family support (dataset, model, metric) + memory fix.
