@@ -1,8 +1,9 @@
+\pdfoutput=1
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{graphicx}
-\graphicspath{{figures/}}
+\graphicspath{{}}
 \usepackage{booktabs}
 \usepackage{tabularx}
 \usepackage{hyperref}
@@ -128,7 +129,7 @@ Algorithm~\ref{alg:cascade} summarizes training-time inference for one image; in
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.95\textwidth]{figures/accumulator_schematic.pdf}
+\includegraphics[width=0.95\textwidth]{accumulator_schematic.pdf}
 \caption{Dense accumulator (left) vs.\ the factorized cascade (right), drawn to scale with the measured element counts of Table~\ref{tab:memory_complexity}. The dense accumulator materializes every $(\text{anchor}, \text{shape})$ combination at once; the cascade computes a coarse 2D anchor map, retains a handful of peaks, and instantiates a dense shape accumulator only at each retained peak.}
 \label{fig:accumulator_schematic}
 \end{figure}
@@ -174,7 +175,7 @@ where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.85\textwidth]{figures/benchmark_examples.png}
+\includegraphics[width=0.85\textwidth]{benchmark_examples.png}
 \caption{Representative benchmark images, clean (top) and corrupted (bottom: noise, occlusion, distractor segments), for each curve family.}
 \label{fig:benchmark_examples}
 \end{figure}
@@ -233,9 +234,9 @@ Notably, the ellipse clean-control F (0.681) exceeds the parabola clean-control 
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.32\textwidth]{figures/stage1_heatmap_ellipse.png}
-\includegraphics[width=0.32\textwidth]{figures/stage2_profile_ellipse.png}
-\includegraphics[width=0.32\textwidth]{figures/qualitative_ellipse.png}
+\includegraphics[width=0.32\textwidth]{stage1_heatmap_ellipse.png}
+\includegraphics[width=0.32\textwidth]{stage2_profile_ellipse.png}
+\includegraphics[width=0.32\textwidth]{qualitative_ellipse.png}
 \caption{The same three views as Figure~\ref{fig:qualitative_parabola}, for a corrupted-setting ellipse example with two overlapping curves and partial occlusion. In contrast to the parabola case, the Stage-1 anchor accumulator (left) is diffuse rather than sharply peaked, since an ellipse's center is far more weakly indicated by summed features than a parabola's vertex; the Stage-2 shape profile (center) is noisy and multimodal, with the predicted peak landing well away from the true shape bin; and the resulting detections (right) visibly undersize and mislocalize both ellipses. This example illustrates, rather than merely states, the robustness gap discussed above (Table~\ref{tab:ellipse_interim}).}
 \label{fig:qualitative_ellipse}
 \end{figure}
@@ -243,9 +244,9 @@ Notably, the ellipse clean-control F (0.681) exceeds the parabola clean-control 
 \paragraph{Qualitative results.}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.32\textwidth]{figures/stage1_heatmap_parabola.png}
-\includegraphics[width=0.32\textwidth]{figures/stage2_profile_parabola.png}
-\includegraphics[width=0.32\textwidth]{figures/qualitative_parabola.png}
+\includegraphics[width=0.32\textwidth]{stage1_heatmap_parabola.png}
+\includegraphics[width=0.32\textwidth]{stage2_profile_parabola.png}
+\includegraphics[width=0.32\textwidth]{qualitative_parabola.png}
 \caption{Stage-1 anchor accumulator (left), Stage-2 shape profile at the top peak (center), and the resulting detection against ground truth (right), for a representative parabola test image. The anchor peak lands on the true vertex and the shape profile is sharply peaked near the true curvature bin, giving a near-pixel-tight fit.}
 \label{fig:qualitative_parabola}
 \end{figure}
