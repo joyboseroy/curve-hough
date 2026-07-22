@@ -21,6 +21,13 @@ def curve_pixels(family, p, H, W, n=400):
         x0, y0, a = p[0], p[1], p[2]
         xs = np.linspace(0, W - 1, n)
         ys = a * (xs - x0) ** 2 + y0
+    elif family == "lane":
+        # near-vertical parabola, x as a function of y -- the orientation
+        # real dashboard-camera lane markings actually need (TuSimple-style
+        # datasets record x per fixed row height, not y per column).
+        y0, x0, a = p[0], p[1], p[2]
+        ys = np.linspace(0, H - 1, n)
+        xs = a * (ys - y0) ** 2 + x0
     elif family == "circle":
         x0, y0, r = p[0], p[1], p[2]
         t = np.linspace(0, 2 * np.pi, n)
@@ -112,7 +119,7 @@ class FactorizedDHT(nn.Module):
         self.Ba = anchor_bins
         ax = np.linspace(0, size - 1, anchor_bins)
         self.anchors = [(x, y) for y in ax for x in ax]  # row-major (y outer)
-        if family == "parabola":
+        if family in ("parabola", "lane"):
             mag = np.geomspace(0.004, 0.06, probe_shapes // 2)
             probe_vals = np.concatenate([-mag[::-1], mag])
             dm = np.geomspace(0.004, 0.06, dense_shapes // 2)
