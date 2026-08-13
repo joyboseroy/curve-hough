@@ -47,6 +47,8 @@ def main():
                     help="max detections per image (defaults to model's, 4)")
     ap.add_argument("--diag", action="store_true",
                     help="print matched curve-EA similarity distribution")
+    ap.add_argument("--family", default="parabola",
+                choices=["parabola", "circle", "ellipse", "lane", "line"])
     args = ap.parse_args()
     if args.smoke:
         args.epochs, args.n_train, args.n_test, args.size = 1, 16, 8, 64
