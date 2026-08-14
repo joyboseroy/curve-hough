@@ -2,8 +2,10 @@
 
 Usage:
     python train.py --family parabola --epochs 5 --n-train 2000
+    python train.py --family line --epochs 5 --n-train 2000
 Smoke test:
     python train.py --smoke
+    python train.py --family line --smoke
 """
 import argparse
 import numpy as np
@@ -25,7 +27,7 @@ def collate(batch):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--family", default="parabola",
-                    choices=["parabola", "circle", "ellipse"])
+                    choices=["parabola", "circle", "ellipse", "lane", "line"])
     ap.add_argument("--size", type=int, default=128)
     ap.add_argument("--epochs", type=int, default=5)
     ap.add_argument("--n-train", type=int, default=2000)
@@ -47,8 +49,6 @@ def main():
                     help="max detections per image (defaults to model's, 4)")
     ap.add_argument("--diag", action="store_true",
                     help="print matched curve-EA similarity distribution")
-    ap.add_argument("--family", default="parabola",
-                choices=["parabola", "circle", "ellipse", "lane", "line"])
     args = ap.parse_args()
     if args.smoke:
         args.epochs, args.n_train, args.n_test, args.size = 1, 16, 8, 64
@@ -56,14 +56,19 @@ def main():
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(0)
     np.random.seed(0)
+    is_line = (args.family == "line")
     kw = dict(noise=0.0, occlude=False, distractors=False, max_curves=1) \
         if args.easy else {}
     train = SyntheticCurves(args.family, args.size, args.n_train, seed=1, **kw)
     test = SyntheticCurves(args.family, args.size, args.n_test, seed=2, **kw)
     tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
-    model = FactorizedDHT(args.family, args.size,
-                          anchor_bins=24 if args.smoke else 32,
-                          topk=args.topk if args.topk else 4).to(dev)
+    model_kwargs = dict(topk=args.topk if args.topk else 4)
+    if not is_line:
+        model_kwargs["anchor_bins"] = 24 if args.smoke else 32
+    else:
+        model_kwargs["theta_bins"] = 24 if args.smoke else 60
+        model_kwargs["r_bins"] = 24 if args.smoke else 60
+    model = FactorizedDHT(args.family, args.size, **model_kwargs).to(dev)
 
     if args.load:
         model.load_state_dict(torch.load(args.load, map_location=dev))
@@ -79,8 +84,14 @@ def main():
             for imgs, params, counts in tl:
                 imgs = imgs.to(dev)
                 P1, P2, picked, feat = model(imgs)
-                l1 = stage1_loss(P1, params, counts, args.size)
-                l2 = model.stage2_loss(feat, params, counts)
+                if is_line:
+                    # a line has no Stage 2 (no spatial anchor to condition
+                    # a shape accumulator on), so only Stage 1's loss applies
+                    l1 = model.stage1_loss(P1, params, counts)
+                    l2 = torch.tensor(0.0, device=dev)
+                else:
+                    l1 = stage1_loss(P1, params, counts, args.size)
+                    l2 = model.stage2_loss(feat, params, counts)
                 loss = l1 + l2
                 opt.zero_grad()
                 loss.backward()
@@ -89,8 +100,8 @@ def main():
             m = np.mean(losses, axis=0)
             print(f"epoch {ep}: stage1 {m[0]:.4f}  stage2 {m[1]:.4f}")
             if args.save:
-                torch.save(model.state_dict(), args.save)  # checkpoint every
-                print(f"  checkpoint saved to {args.save}")  # epoch, not just at the end
+                torch.save(model.state_dict(), args.save)
+                print(f"  checkpoint saved to {args.save}")
         if args.save:
             print(f"training complete, final weights in {args.save}")
 

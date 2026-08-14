@@ -19,7 +19,7 @@ def sample_curve(family, p, size, n=200):
         t = np.linspace(0, 2 * np.pi, n, endpoint=False)
         xs, ys = x0 + r * np.cos(t), y0 + r * np.sin(t)
         tang = np.stack([-np.sin(t), np.cos(t)], -1)
-    else:  # ellipse: p = (x0, y0, rx, ry, phi)
+    elif family == "ellipse":
         x0, y0, rx, ry, phi = p[0], p[1], p[2], p[3], p[4]
         t = np.linspace(0, 2 * np.pi, n, endpoint=False)
         ct, st = np.cos(phi), np.sin(phi)
@@ -28,6 +28,17 @@ def sample_curve(family, p, size, n=200):
         dx = -rx * np.sin(t) * ct - ry * np.cos(t) * st
         dy = -rx * np.sin(t) * st + ry * np.cos(t) * ct
         tang = np.stack([dx, dy], -1)
+    else:  # line
+        theta, r = p[0], p[1]
+        cx, cy = (size - 1) / 2.0, (size - 1) / 2.0
+        ct, st = np.cos(theta), np.sin(theta)
+        if abs(st) > abs(ct):
+            xs = np.linspace(0, size - 1, n)
+            ys = (r - (xs - cx) * ct) / st + cy
+        else:
+            ys = np.linspace(0, size - 1, n)
+            xs = (r - (ys - cy) * st) / ct + cx
+        tang = np.tile(np.array([[-st, ct]]), (n, 1))
     m = (xs >= 0) & (xs < size) & (ys >= 0) & (ys < size)
     pts = np.stack([xs, ys], -1)[m]
     tang = tang[m]
@@ -46,15 +57,15 @@ def curve_ea(family, p1, p2, size):
     dmax = 0.25 * size * np.sqrt(2)
     Sd = max(0.0, 1.0 - chamfer / dmax)
     cosang = np.abs((t1 * t2[nn12]).sum(-1)).clip(0, 1)
-    ang = np.arccos(cosang)  # in [0, pi/2] due to abs
+    ang = np.arccos(cosang)
     Sth = max(0.0, 1.0 - ang.mean() / (np.pi / 2))
     return float((Sd * Sth) ** 2)
 
 
 def prf(dets_per_img, gts_per_img, family, size, thresholds=None, return_sims=False):
     """dets: list per image of (x0, y0, *shape, score) -- variable length
-    depending on family (parabola/circle: 1 shape dim, ellipse: 3).
-    gts: list per image of params (same length as shape, sans score)."""
+    depending on family. gts: list per image of params (same length as
+    shape, sans score)."""
     if thresholds is None:
         thresholds = np.arange(0.01, 1.0, 0.01)
     P, R, F = [], [], []
@@ -67,7 +78,7 @@ def prf(dets_per_img, gts_per_img, family, size, thresholds=None, return_sims=Fa
         M = np.zeros((len(dets), len(gts)))
         for i, d in enumerate(dets):
             for j, g in enumerate(gts):
-                M[i, j] = curve_ea(family, d[:-1], g, size)  # drop trailing score
+                M[i, j] = curve_ea(family, d[:-1], g, size)
         ri, ci = linear_sum_assignment(-M)
         sims_all.extend(M[ri, ci].tolist())
     sims_all = np.array(sims_all)
