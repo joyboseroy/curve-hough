@@ -45,6 +45,8 @@ def main():
     ap.add_argument("--resume", default="")
     ap.add_argument("--sweep", action="store_true")
     ap.add_argument("--thresh", type=float, default=0.25)
+    ap.add_argument("--diag", action="store_true",
+                    help="print matched curve-EA similarity distribution")
     args = ap.parse_args()
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,6 +73,28 @@ def main():
         model_kwargs["r_bins"] = 60
     else:
         model_kwargs["anchor_bins"] = 32
+        # The default shape range (0.004, 0.06) was tuned on the synthetic
+        # benchmark and doesn't necessarily cover real curvature -- 24.4% of
+        # real TuSimple lane 'a' values fell outside it in an earlier check.
+        # Compute from this dataset's actual distribution instead: p5-p95
+        # covers the bulk of real values while not letting a few extreme
+        # outliers blow the range out (which would waste probe/dense
+        # resolution on rarely-seen curvatures).
+        all_a = []
+        for i in range(len(full)):
+            _, params, k = full[i]
+            for j in range(k):
+                a_val = abs(float(params[j][2]))
+                if a_val > 1e-6:  # skip exact zeros (shouldn't occur for
+                    all_a.append(a_val)  # 'lane', which excludes near-straight
+        if all_a:
+            lo = max(1e-4, np.percentile(all_a, 5))
+            hi = np.percentile(all_a, 95)
+            print(f"shape range from data (p5-p95 of |a|, n={len(all_a)}): "
+                  f"[{lo:.5f}, {hi:.5f}]  (default was [0.004, 0.06])")
+            model_kwargs["shape_range"] = (lo, hi)
+        else:
+            print("no curvature values found -- keeping default shape_range")
     model = FactorizedDHT(args.family, args.size, **model_kwargs).to(dev)
 
     if args.load:
@@ -117,9 +141,15 @@ def main():
             dets_all.append(model.detect(img[None].to(dev), thresh=thresh)[0])
         n_det = sum(len(d) for d in dets_all)
         n_gt = sum(len(g) for g in gts_by_img)
-        p, r, f = prf(dets_all, gts_by_img, args.family, args.size)
+        (p, r, f), sims = prf(dets_all, gts_by_img, args.family, args.size,
+                              return_sims=True)
         print(f"thresh {thresh:.2f}: detections {n_det} vs gt {n_gt}  "
               f"P {p:.3f} R {r:.3f} F {f:.3f}")
+        if args.diag and len(sims):
+            q = np.percentile(sims, [10, 25, 50, 75, 90])
+            print(f"  matched curve-EA similarity: mean {sims.mean():.3f}  "
+                  f"p10/p25/p50/p75/p90 = {q[0]:.2f}/{q[1]:.2f}/{q[2]:.2f}/"
+                  f"{q[3]:.2f}/{q[4]:.2f}  (n={len(sims)})")
         return f
 
     if args.sweep:

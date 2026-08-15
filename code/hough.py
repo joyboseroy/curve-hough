@@ -134,12 +134,16 @@ class FactorizedDHT(nn.Module):
                  anchor_bins=32, probe_shapes=6, dense_shapes=48, topk=4,
                  ellipse_probe_per_axis=3, ellipse_dense_per_axis=6,
                  bank_max_pts=128, bank2_cache_size=64,
-                 theta_bins=90, r_bins=90):
+                 theta_bins=90, r_bins=90, shape_range=(0.004, 0.06)):
         super().__init__()
         self.family, self.size, self.topk = family, size, topk
         self.bank_max_pts = bank_max_pts
         self.bank2_cache_size = bank2_cache_size
         self.is_line = (family == LINE_FAMILY)
+        self.swap_xy = (family == "lane")  # lane stores (y0, x0, a); every
+        # other spatial family stores (x0, y0, ...). Shared anchor-targeting
+        # code below assumes (x, y) order, so lane needs an explicit swap
+        # at each of the three points that assumption is used.
 
         if self.is_line:
             # A line has no spatial anchor separate from its own params:
@@ -166,9 +170,10 @@ class FactorizedDHT(nn.Module):
         ax = np.linspace(0, size - 1, anchor_bins)
         self.anchors = [(x, y) for y in ax for x in ax]  # row-major (y outer)
         if family in ("parabola", "lane"):
-            mag = np.geomspace(0.004, 0.06, probe_shapes // 2)
+            lo, hi = shape_range
+            mag = np.geomspace(lo, hi, probe_shapes // 2)
             probe_vals = np.concatenate([-mag[::-1], mag])
-            dm = np.geomspace(0.004, 0.06, dense_shapes // 2)
+            dm = np.geomspace(lo, hi, dense_shapes // 2)
             dense_vals = np.concatenate([-dm[::-1], dm])
             self.probe = [(v,) for v in probe_vals]
             self.dense = [(v,) for v in dense_vals]
@@ -261,7 +266,8 @@ class FactorizedDHT(nn.Module):
         for b in range(feat.shape[0]):
             for j in range(counts[b]):
                 p = params[b][j]
-                a_idx = self.anchor_index(p[0], p[1])
+                px, py = (p[1], p[0]) if self.swap_xy else (p[0], p[1])
+                a_idx = self.anchor_index(px, py)
                 bank2 = self.bank2_for(a_idx, feat.device)
                 y2 = vote(feat[b:b + 1], bank2)
                 logits = self.head2(y2)[0, 0]
@@ -302,7 +308,9 @@ class FactorizedDHT(nn.Module):
                 targets.append(t)
             return torch.stack(targets)[:, None]
         return torch.stack([
-            gaussian_target(self.Ba, [(p[0], p[1]) for p in params_batch[b][:counts[b]]],
+            gaussian_target(self.Ba,
+                            [((p[1], p[0]) if self.swap_xy else (p[0], p[1]))
+                             for p in params_batch[b][:counts[b]]],
                             self.size, sigma=sigma)
             for b in range(B)])[:, None]
 
@@ -374,7 +382,10 @@ class FactorizedDHT(nn.Module):
                 dvals = torch.as_tensor(self._dense_arr[lo:hi], dtype=torch.float32,
                                         device=img.device)
                 s_val = (sw[:, None] * dvals).sum(0)
-                dets.append((ax, ay, *s_val.tolist(), v))
+                if self.swap_xy:
+                    dets.append((ay, ax, *s_val.tolist(), v))
+                else:
+                    dets.append((ax, ay, *s_val.tolist(), v))
             out.append(dets)
         return out
 
