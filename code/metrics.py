@@ -10,7 +10,7 @@ def sample_curve(family, p, size, n=200):
         ys = a * (xs - x0) ** 2 + y0
         tang = np.stack([np.ones_like(xs), 2 * a * (xs - x0)], -1)
     elif family == "lane":
-        y0, x0, a = p[0], p[1], p[2]
+        x0, y0, a = p[0], p[1], p[2]
         ys = np.linspace(0, size - 1, n)
         xs = a * (ys - y0) ** 2 + x0
         tang = np.stack([2 * a * (ys - y0), np.ones_like(ys)], -1)

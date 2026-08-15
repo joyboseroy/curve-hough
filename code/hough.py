@@ -29,7 +29,7 @@ def curve_pixels(family, p, H, W, n=400):
         xs = np.linspace(0, W - 1, n)
         ys = a * (xs - x0) ** 2 + y0
     elif family == "lane":
-        y0, x0, a = p[0], p[1], p[2]
+        x0, y0, a = p[0], p[1], p[2]
         ys = np.linspace(0, H - 1, n)
         xs = a * (ys - y0) ** 2 + x0
     elif family == "circle":
@@ -140,10 +140,6 @@ class FactorizedDHT(nn.Module):
         self.bank_max_pts = bank_max_pts
         self.bank2_cache_size = bank2_cache_size
         self.is_line = (family == LINE_FAMILY)
-        self.swap_xy = (family == "lane")  # lane stores (y0, x0, a); every
-        # other spatial family stores (x0, y0, ...). Shared anchor-targeting
-        # code below assumes (x, y) order, so lane needs an explicit swap
-        # at each of the three points that assumption is used.
 
         if self.is_line:
             # A line has no spatial anchor separate from its own params:
@@ -266,8 +262,7 @@ class FactorizedDHT(nn.Module):
         for b in range(feat.shape[0]):
             for j in range(counts[b]):
                 p = params[b][j]
-                px, py = (p[1], p[0]) if self.swap_xy else (p[0], p[1])
-                a_idx = self.anchor_index(px, py)
+                a_idx = self.anchor_index(p[0], p[1])
                 bank2 = self.bank2_for(a_idx, feat.device)
                 y2 = vote(feat[b:b + 1], bank2)
                 logits = self.head2(y2)[0, 0]
@@ -308,9 +303,7 @@ class FactorizedDHT(nn.Module):
                 targets.append(t)
             return torch.stack(targets)[:, None]
         return torch.stack([
-            gaussian_target(self.Ba,
-                            [((p[1], p[0]) if self.swap_xy else (p[0], p[1]))
-                             for p in params_batch[b][:counts[b]]],
+            gaussian_target(self.Ba, [(p[0], p[1]) for p in params_batch[b][:counts[b]]],
                             self.size, sigma=sigma)
             for b in range(B)])[:, None]
 
@@ -382,10 +375,7 @@ class FactorizedDHT(nn.Module):
                 dvals = torch.as_tensor(self._dense_arr[lo:hi], dtype=torch.float32,
                                         device=img.device)
                 s_val = (sw[:, None] * dvals).sum(0)
-                if self.swap_xy:
-                    dets.append((ay, ax, *s_val.tolist(), v))
-                else:
-                    dets.append((ax, ay, *s_val.tolist(), v))
+                dets.append((ax, ay, *s_val.tolist(), v))
             out.append(dets)
         return out
 

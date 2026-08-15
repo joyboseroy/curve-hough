@@ -24,7 +24,7 @@ def draw_parabola(img, x0, y0, a, n=600):
     return rasterize_points(img, xs[m], ys[m])
 
 
-def draw_lane(img, y0, x0, a, n=600):
+def draw_lane(img, x0, y0, a, n=600):
     """Near-vertical parabola: x = a(y-y0)^2 + x0."""
     H, W = img.shape
     ys = np.linspace(0, H - 1, n)
@@ -79,7 +79,7 @@ FAMILY_PARAM_LEN = {"parabola": 3, "circle": 3, "ellipse": 5, "lane": 3, "line":
 
 class SyntheticCurves(Dataset):
     """family: 'parabola' -> (x0, y0, a); 'circle' -> (x0, y0, r);
-    'ellipse' -> (x0, y0, rx, ry, phi); 'lane' -> (y0, x0, a);
+    'ellipse' -> (x0, y0, rx, ry, phi); 'lane' -> (x0, y0, a);
     'line' -> (theta, r). Param tensor is always width 5, padded with
     zeros beyond each family's actual length."""
 
@@ -102,8 +102,8 @@ class SyntheticCurves(Dataset):
             out[1] = rng.uniform(0.15 * s, 0.85 * s)
             out[2] = rng.choice([-1, 1]) * rng.uniform(0.004, 0.06)
         elif self.family == "lane":
-            out[0] = rng.uniform(0.15 * s, 0.85 * s)   # y0
-            out[1] = rng.uniform(0.15 * s, 0.85 * s)   # x0
+            out[0] = rng.uniform(0.15 * s, 0.85 * s)   # x0
+            out[1] = rng.uniform(0.15 * s, 0.85 * s)   # y0
             out[2] = rng.choice([-1, 1]) * rng.uniform(0.004, 0.06)
         elif self.family == "circle":
             out[0] = rng.uniform(0.2 * s, 0.8 * s)
