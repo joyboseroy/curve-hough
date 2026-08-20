@@ -7,8 +7,8 @@ see tusimple_loader.py). One model per family, per the current design
 Letterbox (uniform scale + pad), not stretch: preserves line angles and
 keeps the parabola/line parameter transform in simple closed form. Under
 x' = x*scale, y' = y*scale + pad_y:
-  lane (y0,x0,a):  new_a = a/scale, new_y0 = pad_y + scale*y0,
-                    new_x0 = scale*x0
+  lane (x0,y0,a):  new_a = a/scale, new_x0 = scale*x0,
+                    new_y0 = pad_y + scale*y0
   line (theta,r):  new_theta = theta (angles preserved by uniform scale),
                     new_r = r*scale
 """
@@ -28,8 +28,8 @@ def letterbox_params(family, params, size, orig_w=ORIG_W, orig_h=ORIG_H):
     scale = size / orig_w  # orig is landscape (W>H), so W-bound is the tight one
     pad_y = (size - orig_h * scale) / 2.0
     if family == "lane":
-        y0, x0, a = params
-        return (pad_y + scale * y0, scale * x0, a / scale)
+        x0, y0, a = params
+        return (scale * x0, pad_y + scale * y0, a / scale)
     else:  # line
         theta, r = params
         return (theta, r * scale)
@@ -49,21 +49,51 @@ class RealTuSimpleDataset(Dataset):
     """family: 'lane' or 'line'. root: path to a TuSimple train_set dir
     containing clips/ and label_data_*.json. max_curves: cap on lanes per
     image kept for this family (excess dropped, matching train.py's
-    fixed-size params tensor convention)."""
+    fixed-size params tensor convention).
+
+    vertex_margin: for 'lane', an off-frame filter separate from
+    fit_lane_params's numerical-stability bound_factor check. A parabola
+    fit can be numerically perfectly stable while its vertex still
+    legitimately extrapolates well outside the photographed scene (a
+    gently-curving lane's vertex is just wherever the curve is flattest,
+    which need not be in view). Confirmed on real data: several such
+    vertices land 100+ px outside a 128px frame. Since self.anchors only
+    spans [0, size), a target that far outside the grid gives Stage 1
+    essentially no usable training signal for that lane -- silently, not
+    as an error. This filter drops those lanes before they ever reach
+    training. margin=0.5 means a vertex up to half the image size beyond
+    the frame edge is still kept (some off-frame slack is fine, since the
+    curve's visible arc still carries real evidence); larger margins keep
+    more numerically-fitted-but-poorly-anchorable lanes."""
 
     def __init__(self, root, family, size=128, label_globs=None, max_curves=4,
-                 max_images=None):
+                 max_images=None, vertex_margin=0.5):
         assert family in ("lane", "line")
         self.root, self.family, self.size = root, family, size
         self.max_curves = max_curves
         if label_globs is None:
             label_globs = sorted(glob.glob(os.path.join(root, "label_data_*.json")))
         self.items = []  # (raw_file, [params, ...]) filtered to this family
+        n_dropped_offframe = 0
         for path in label_globs:
             for raw_file, results in load_tusimple_labels(path):
                 fam_params = [p for f, p in results if f == family]
+                if family == "lane" and fam_params:
+                    lo, hi = -vertex_margin * size, (1 + vertex_margin) * size
+                    kept = []
+                    for p in fam_params:
+                        tx, ty, _ = letterbox_params("lane", p, size)
+                        if lo <= tx <= hi and lo <= ty <= hi:
+                            kept.append(p)
+                        else:
+                            n_dropped_offframe += 1
+                    fam_params = kept
                 if fam_params:
                     self.items.append((raw_file, fam_params))
+        if family == "lane" and n_dropped_offframe:
+            print(f"dropped {n_dropped_offframe} lane(s) with vertex too far "
+                  f"outside the frame (margin={vertex_margin}) -- these were "
+                  f"numerically stable fits but not usable Stage-1 targets")
         if max_images:
             self.items = self.items[:max_images]
 
@@ -97,15 +127,15 @@ if __name__ == "__main__":
 
     S = 128
     orig = np.zeros((ORIG_H, ORIG_W), np.float32)
-    y0, x0, a = 300.0, 600.0, 0.0015
-    draw_lane(orig, y0, x0, a)
+    x0, y0, a = 600.0, 300.0, 0.0015
+    draw_lane(orig, x0, y0, a)
     orig_img = Image.fromarray((orig * 255).astype(np.uint8))
     resized = letterbox_image(orig_img, S)
     resized_arr = np.asarray(resized, dtype=np.float32) / 255.0
 
-    new_y0, new_x0, new_a = letterbox_params("lane", (y0, x0, a), S)
+    new_x0, new_y0, new_a = letterbox_params("lane", (x0, y0, a), S)
     redrawn = np.zeros((S, S), np.float32)
-    draw_lane(redrawn, new_y0, new_x0, new_a)
+    draw_lane(redrawn, new_x0, new_y0, new_a)
 
     both = (resized_arr > 0) & (redrawn > 0)
     only_resized = (resized_arr > 0) & ~(redrawn > 0)

@@ -47,6 +47,11 @@ def main():
     ap.add_argument("--thresh", type=float, default=0.25)
     ap.add_argument("--diag", action="store_true",
                     help="print matched curve-EA similarity distribution")
+    ap.add_argument("--vertex-margin", type=float, default=0.5,
+                    help="lane only: drop lanes whose transformed vertex falls "
+                         "more than this fraction of the image size outside the "
+                         "frame (0.5 default; try smaller to keep only well-"
+                         "in-frame vertices, larger to keep more marginal ones)")
     args = ap.parse_args()
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -54,7 +59,8 @@ def main():
     is_line = (args.family == "line")
 
     full = RealTuSimpleDataset(args.root, args.family, size=args.size,
-                               max_images=args.max_images)
+                               max_images=args.max_images,
+                               vertex_margin=args.vertex_margin)
     n = len(full)
     print(f"loaded {n} real frames with >=1 '{args.family}' lane")
     n_test = max(1, n // 10)

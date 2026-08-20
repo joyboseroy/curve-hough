@@ -17,7 +17,7 @@ import numpy as np
 
 def fit_lane_params(xs, ys, img_w=1280, img_h=720, bound_factor=3):
     """Least-squares x = A*y^2 + B*y + C, converted to vertex form
-    (y0, x0, a). Returns None if the fit is near-straight enough that the
+    (x0, y0, a). Returns None if the fit is near-straight enough that the
     vertex-form conversion is unstable (bounds check on the OUTPUT, not on
     A -- confirmed on real data that a raw-A threshold alone lets unstable
     fits through)."""
@@ -36,7 +36,7 @@ def fit_lane_params(xs, ys, img_w=1280, img_h=720, bound_factor=3):
     x0 = C - B ** 2 / (4 * A)
     if abs(x0) > bound_factor * img_w or abs(y0) > bound_factor * img_h:
         return None
-    return float(y0), float(x0), float(A)
+    return float(x0), float(y0), float(A)
 
 
 def fit_line_params(xs, ys, img_w=1280, img_h=720):
