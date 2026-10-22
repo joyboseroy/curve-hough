@@ -89,8 +89,12 @@ def stage1_accumulate(feat, bank1, num_anchors, pool="logsumexp"):
     stacked = torch.stack(slices, dim=-1)                # [B, C, A, S]
     if pool == "logsumexp":
         pooled = torch.logsumexp(stacked, dim=-1)
-    else:
+    elif pool == "max":
+        pooled = stacked.max(-1).values
+    elif pool == "mean":
         pooled = stacked.mean(-1)
+    else:
+        raise ValueError(f"unknown pool '{pool}' (logsumexp | mean | max)")
     return pooled.reshape(B, C, num_anchors, num_anchors) if isinstance(num_anchors, int) \
         else pooled.reshape(B, C, *num_anchors)
 
@@ -134,9 +138,13 @@ class FactorizedDHT(nn.Module):
                  anchor_bins=32, probe_shapes=6, dense_shapes=48, topk=4,
                  ellipse_probe_per_axis=3, ellipse_dense_per_axis=6,
                  bank_max_pts=128, bank2_cache_size=64,
-                 theta_bins=90, r_bins=90, shape_range=(0.004, 0.06)):
+                 theta_bins=90, r_bins=90, shape_range=(0.004, 0.06),
+                 pool="logsumexp"):
         super().__init__()
         self.family, self.size, self.topk = family, size, topk
+        # pool: how Stage 1 combines the probe-shape votes at each anchor
+        # ('logsumexp' is the paper's default; 'mean' and 'max' for ablation)
+        self.pool = pool
         self.bank_max_pts = bank_max_pts
         self.bank2_cache_size = bank2_cache_size
         self.is_line = (family == LINE_FAMILY)
@@ -209,7 +217,7 @@ class FactorizedDHT(nn.Module):
         B = img.shape[0]
         X = self.encoder(img)
         feat = X.flatten(2)
-        Y1 = stage1_accumulate(feat, self.bank1, (self.Ba_theta, self.Ba_r))
+        Y1 = stage1_accumulate(feat, self.bank1, (self.Ba_theta, self.Ba_r), pool=self.pool)
         P1 = self.head1(Y1)                                  # [B,1,Btheta,Br]
         return P1, feat
 
@@ -319,7 +327,7 @@ class FactorizedDHT(nn.Module):
         B = img.shape[0]
         X = self.encoder(img)
         feat = X.flatten(2)
-        Y1 = stage1_accumulate(feat, self.bank1, self.Ba)
+        Y1 = stage1_accumulate(feat, self.bank1, self.Ba, pool=self.pool)
         P1 = self.head1(Y1)
         flat = P1.flatten(1)
         top = flat.topk(self.topk, dim=1).indices
@@ -335,13 +343,42 @@ class FactorizedDHT(nn.Module):
         return P1, torch.stack(P2), torch.stack(picked), feat
 
     @torch.no_grad()
+    def stage1_logits(self, img):
+        """Stage-1 anchor logits [B, 1, Ba, Ba] (non-line families)."""
+        feat = self.encoder(img).flatten(2)
+        return self.head1(stage1_accumulate(feat, self.bank1, self.Ba, pool=self.pool))
+
+    @torch.no_grad()
+    def detect_at_anchors(self, img, anchors_xy):
+        """Run Stage 2 only, at the given ground-truth anchors (x, y), skipping
+        Stage 1. Each anchor is snapped to its Stage-1 bin, exactly as Stage 2
+        is conditioned during training, and the returned anchor coordinates are
+        that bin's centre. Used for the oracle-anchor ceiling: how well the
+        cascade would do if Stage 1 were perfect up to binning."""
+        feat = self.encoder(img).flatten(2)
+        dets = []
+        for (gx, gy) in anchors_xy:
+            a_idx = self.anchor_index(gx, gy)
+            ax, ay = self.anchors[a_idx]
+            y2 = vote(feat[0:1], self.bank2_for(a_idx, img.device))
+            s_prof = self.head2(y2)[0, 0]
+            s_idx = int(s_prof.argmax())
+            lo, hi = max(0, s_idx - 1), min(len(self.dense), s_idx + 2)
+            sw = torch.softmax(s_prof[lo:hi], 0)
+            dvals = torch.as_tensor(self._dense_arr[lo:hi], dtype=torch.float32,
+                                    device=img.device)
+            s_val = (sw[:, None] * dvals).sum(0)
+            dets.append((float(ax), float(ay), *s_val.tolist(), 1.0))
+        return dets
+
+    @torch.no_grad()
     def detect(self, img, thresh=0.25):
         if self.is_line:
             return self._detect_line(img, thresh=thresh)
         B = img.shape[0]
         X = self.encoder(img)
         feat = X.flatten(2)
-        Y1 = stage1_accumulate(feat, self.bank1, self.Ba)
+        Y1 = stage1_accumulate(feat, self.bank1, self.Ba, pool=self.pool)
         P1 = self.head1(Y1)
         pooled = F.max_pool2d(P1, 3, stride=1, padding=1)
         peaks = (P1 == pooled).float() * torch.sigmoid(P1)

@@ -84,9 +84,14 @@ class SyntheticCurves(Dataset):
     zeros beyond each family's actual length."""
 
     def __init__(self, family="parabola", size=128, n_images=8000, seed=0,
-                 noise=0.08, occlude=True, distractors=True, max_curves=3):
+                 noise=0.08, occlude=True, distractors=True, max_curves=3,
+                 occ_max=2):
         self.family, self.size, self.n = family, size, n_images
         self.noise, self.occlude, self.distractors = noise, occlude, distractors
+        # occ_max: maximum number of occluding rectangles per image; the count
+        # is drawn uniformly from 0..occ_max. The default (2) reproduces the
+        # original generator bit for bit.
+        self.occ_max = occ_max
         self.max_curves = max_curves
         self.seed = seed
         self.param_len = FAMILY_PARAM_LEN[family]
@@ -122,6 +127,18 @@ class SyntheticCurves(Dataset):
             # extreme edge of the range so the line reliably crosses the frame
         return out
 
+    def _draw(self, img, p):
+        if self.family == "parabola":
+            draw_parabola(img, p[0], p[1], p[2])
+        elif self.family == "lane":
+            draw_lane(img, p[0], p[1], p[2])
+        elif self.family == "circle":
+            draw_circle(img, p[0], p[1], p[2])
+        elif self.family == "ellipse":
+            draw_ellipse(img, p[0], p[1], p[2], p[3], p[4])
+        else:
+            draw_line(img, p[0], p[1])
+
     def __getitem__(self, idx):
         rng = np.random.default_rng(self.seed * 1000003 + idx)
         s = self.size
@@ -131,23 +148,62 @@ class SyntheticCurves(Dataset):
         for j in range(k):
             p = self.sample_params(rng)
             params[j] = p
-            if self.family == "parabola":
-                draw_parabola(img, p[0], p[1], p[2])
-            elif self.family == "lane":
-                draw_lane(img, p[0], p[1], p[2])
-            elif self.family == "circle":
-                draw_circle(img, p[0], p[1], p[2])
-            elif self.family == "ellipse":
-                draw_ellipse(img, p[0], p[1], p[2], p[3], p[4])
-            else:
-                draw_line(img, p[0], p[1])
+            self._draw(img, p)
         if self.distractors:
             for _ in range(rng.integers(0, 4)):
                 draw_segment(img, rng.uniform(0, s, 2), rng.uniform(0, s, 2))
         if self.occlude:
-            for _ in range(rng.integers(0, 3)):
+            for _ in range(rng.integers(0, self.occ_max + 1)):
                 x, y = rng.integers(0, s, 2)
                 w, h = rng.integers(8, s // 3, 2)
                 img[y:y + h, x:x + w] = 0.0
         img = np.clip(img + rng.normal(0, self.noise, img.shape), 0, 1).astype(np.float32)
         return torch.from_numpy(img)[None], torch.from_numpy(params), int(k)
+
+
+class SeparationCurves(SyntheticCurves):
+    """Exactly two curves of one family whose spatial anchors are `sep`
+    pixels apart (sep=0 means identical anchors). Used to measure how the
+    anchor-first factorization behaves when anchors are close or shared.
+    The two curves are forced to differ in their first shape parameter by at
+    least 30% (relative), so the pair is always two distinct curves rather
+    than one curve drawn twice. Noise only by default: no occluders or
+    distractors, so the effect of separation is not confounded."""
+
+    def __init__(self, family="parabola", size=64, n_images=200, seed=0,
+                 sep=8.0, noise=0.08, **kw):
+        kw.setdefault("occlude", False)
+        kw.setdefault("distractors", False)
+        super().__init__(family, size, n_images, seed, noise=noise,
+                         max_curves=2, **kw)
+        self.sep = float(sep)
+
+    def __getitem__(self, idx):
+        rng = np.random.default_rng(self.seed * 1000003 + idx)
+        s = self.size
+        img = np.zeros((s, s), np.float32)
+        p1 = self.sample_params(rng)
+        p2 = self.sample_params(rng)
+        for _ in range(50):
+            a, b = p1[2], p2[2]
+            if abs(a - b) / max(abs(a), abs(b), 1e-9) >= 0.3:
+                break
+            p2 = self.sample_params(rng)
+        lo, hi = 0.1 * s, 0.9 * s
+        placed = False
+        for _ in range(40):
+            ang = rng.uniform(0, 2 * np.pi)
+            x2 = p1[0] + self.sep * np.cos(ang)
+            y2 = p1[1] + self.sep * np.sin(ang)
+            if lo <= x2 <= hi and lo <= y2 <= hi:
+                placed = True
+                break
+        if not placed:
+            x2, y2 = np.clip(x2, lo, hi), np.clip(y2, lo, hi)
+        p2[0], p2[1] = x2, y2
+        params = np.zeros((2, 5), np.float32)
+        for j, p in enumerate((p1, p2)):
+            params[j] = p
+            self._draw(img, p)
+        img = np.clip(img + rng.normal(0, self.noise, img.shape), 0, 1).astype(np.float32)
+        return torch.from_numpy(img)[None], torch.from_numpy(params), 2

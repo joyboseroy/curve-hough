@@ -1,332 +1,403 @@
-\pdfoutput=1
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsfonts,amsthm}
 \usepackage{graphicx}
-\graphicspath{{}}
 \usepackage{booktabs}
 \usepackage{tabularx}
+\usepackage[table]{xcolor}
 \usepackage{hyperref}
 \usepackage{algorithm,algpseudocode}
+\usepackage{placeins}
 \usepackage[numbers]{natbib}
 \newtheorem{proposition}{Proposition}
 
+% Set to true for a double-blind copy (removes author block and links).
+\newif\ifanon
+\anonfalse
+
 \title{Beyond Lines: A Factorized Deep Hough Transform\\for Parametric Curve Detection}
-\author{Joy Bose\thanks{Code, benchmark generator, and trained configurations: \url{https://github.com/joyboseroy/curve-hough}. Archived version: \url{https://doi.org/10.5281/zenodo.21424983}}\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
+\ifanon
+\author{Anonymous Authors}
+\else
+\author{Joy Bose\thanks{Code, benchmark generator and configurations: \url{https://github.com/joyboseroy/curve-hough}.}\\Independent Researcher, Bengaluru, India\\\texttt{joy.bose@ieee.org}}
+\fi
 \date{}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-The Deep Hough Transform (DHT) embeds classical Hough voting inside a convolutional network and achieves accurate, real-time detection of semantic straight lines by aggregating learned features along candidate lines into a two-dimensional parameter space. Extending this idea beyond lines has remained open: for a curve family with $d$ parameters the accumulator grows as $O(B^{d})$ in the number of bins $B$, making the direct generalization intractable in memory and computation for even quadratic curves. We propose a factorized deep Hough transform that makes feature-space voting practical for parametric curves. Our method decomposes the parameter space into a cascade of low-dimensional voting stages: a coarse marginal accumulator localizes a curve anchor (for example the vertex of a parabola or the center of a circle), and conditional accumulators, instantiated only at detected anchor peaks, resolve the remaining shape parameters. All stages aggregate deep features rather than edge pixels and are trained end to end with a peak detection loss in each accumulator. We further introduce a curve agreement score that extends the EA line similarity metric to arbitrary parametric curves, and a synthetic benchmark with noise, occlusion, and distractor structures covering parabolas, circles, and ellipses ($d=5$). Against classical Hough voting, RANSAC, direct parameter regression, and a DETR-style hypothesis-query baseline on this benchmark, we find that the geometric-hypothesis-space methods we evaluate, classical (RANSAC, dense Hough) and deep (ours) alike, substantially outperform the regression and query-based baselines under occlusion and clutter, while factorized voting remains competitive with the classical geometric methods at low parameter dimensionality and, by construction, extends to dimensionalities where classical minimal-point solvers and dense accumulators are no longer tractable. On ellipses, clean-setting accuracy matches or exceeds the lower-dimensional families, but robustness to occlusion and clutter degrades markedly faster than at $d=3$, an honest limitation of the current cascade that we analyze and connect to a planned coarse-to-fine refinement stage. We conclude with an analysis that interprets Hough voting as cross-attention whose attention map is fixed by geometry rather than learned, which situates our method and suggests learned hypothesis spaces as a natural extension. Code and the benchmark are released.
+We extend the Deep Hough Transform (DHT), which detects semantic lines by aggregating learned features along candidate lines into a two-dimensional parameter space, to higher-dimensional parametric curve families. The extension is hard because the accumulator for a family with $d$ parameters has $O(B^{d})$ cells for $B$ bins per axis. We propose a factorized deep Hough transform, a differentiable feature-space voting cascade that splits the parameter vector into a spatial anchor and a shape. A coarse two-dimensional accumulator votes for anchors, and a dense shape accumulator is built only around the top-$k$ anchors, so memory falls from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$. Lines are the degenerate case with no second stage. We also define a curve agreement score that extends the EA line similarity to parametric curves, and a synthetic benchmark of parabolas, circles and ellipses with noise, occlusion and distractors.
+
+We evaluate with thresholds selected on a validation split and the test split scored once, and we give the geometric baselines the same treatment. Under this protocol the choice of Stage-1 pooling over probe shapes matters a great deal: max pooling raises parabola F from $0.51$ to $0.70$ over log-sum-exp (3 seeds). With it, the cascade ties a tuned RANSAC fit on parabolas ($0.706$ vs.\ $0.702$) and circles ($0.743$ vs.\ $0.742$) and is slightly behind it on ellipses ($0.382$ vs.\ $0.410$), while direct regression and query-based heads reach $0.15$ and $0.13$ on parabolas. So the cascade is competitive with classical fitting rather than better than it, and its practical advantage is memory: at $B=32$ a dense $d=5$ accumulator would need about 4\,GB (computed, not instantiated) against a measured 236\,KB for the cascade. We locate the remaining error in Stage 1. Running Stage 2 at the ground-truth anchors gives F $=0.938$ against $0.706$, and curves whose anchors lie within about 8 pixels of each other lose about 0.2 F because their Stage-1 peaks merge. We also report a TuSimple lane-detection stress test, which we treat as a feasibility check rather than a competitive result. Code and the benchmark generator are released.
 \end{abstract}
 
 \section{Introduction}
 \label{sec:intro}
-Detecting global geometric structure from local evidence is one of the oldest problems in computer vision. The Hough transform \citep{hough1962,duda1972} solves it for straight lines by letting every edge pixel vote for all lines passing through it; peaks in the $(\theta, r)$ parameter space reveal lines that many pixels jointly support. The recent Deep Hough Transform (DHT) \citep{zhao2021deep} modernized this idea: instead of voting edge pixels, it aggregates learned CNN features along every candidate line into the parametric domain, detects peaks there with lightweight convolutions, and trains the whole pipeline end to end. The result is accurate, context-aware, real-time semantic line detection.
+The Hough transform \citep{hough1962,duda1972} detects a parametric shape by letting evidence vote for every shape that could explain it. For lines, each edge pixel votes for all lines through it, and peaks in the $(\theta,r)$ space are detections. The Deep Hough Transform (DHT) \citep{zhao2021deep} moves this into a network: instead of voting edge pixels it averages learned CNN features along every candidate line, finds peaks in the parameter space with a small convolutional head, and trains everything end to end.
 
-The success of DHT invites an obvious question with a non-obvious answer: why only lines? Classical Hough theory has been extended over four decades to circles, ellipses, and families of algebraic curves \citep{ballard1981,torrente2014}, with applications including the extraction of anatomical profiles such as vertebrae boundaries from CT slices \citep{massone2015}. Yet the deep, feature-space formulation has remained confined to straight lines \citep{zhao2021deep,lin2020houghpriors,houglanenet2023}. The obstacle is structural. A line needs two parameters, so its accumulator is a manageable 2D map. A circle or a vertex-form parabola needs three, an ellipse five, and a cubic Bezier eight; a dense accumulator over $d$ parameters with $B$ bins per axis costs $O(B^{d})$ memory and $O(B^{d} \cdot S)$ aggregation work for $S$ samples per curve. At useful resolutions this is prohibitive beyond $d = 2$, and it explains why deep curve detectors abandoned voting altogether in favor of direct parameter regression \citep{polylanenet2020,lstr2021,feng2022bezier}.
+Classical Hough theory has been extended to circles, ellipses and algebraic curves \citep{ballard1981,torrente2014,massone2015}, but the feature-space formulation has stayed with lines \citep{zhao2021deep,lin2020houghpriors,houglanenet2023}. The reason is cost. A line has two parameters, so its accumulator is a small map. A vertex-form parabola or a circle has three, an ellipse five, and a dense accumulator with $B$ bins per axis has $B^{d}$ cells, each holding a $C$-channel feature. Deep curve detectors therefore moved to direct parameter regression \citep{polylanenet2020,lstr2021,feng2022bezier}, which gives up the explicit evidence surface that voting provides.
 
-Direct regression, however, gives up exactly what voting provides: an explicit, interpretable evidence surface in which every hypothesis competes, robustness to occlusion because missing evidence lowers but does not destroy a peak, and a detection formulation that needs no matching-based training tricks. We show these properties can be retained for curves at tractable cost.
+Our approach follows the multi-stage ellipse detectors of the classical literature \citep{yuen1989ellipse}: find where the curve is first, then what shape it has. We write the parameters as an anchor and a shape. Stage 1 votes over anchors only, pooling over a small set of probe shapes. Stage 2 votes over shape only, and only around the $k$ strongest anchors. The cost of the accumulators drops from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$.
 
-Our key observation is that the classical literature already contains the answer in embryonic form: multi-stage Hough methods detect ellipse centers first and remaining parameters second \citep{yuen1989ellipse}. We lift this idea into the deep setting as a \emph{factorized deep Hough transform}: a cascade of low-dimensional, feature-space voting stages, each differentiable, each followed by peak detection, with later stages instantiated only at peaks of earlier ones. For a parabola in vertex form, a coarse 2D accumulator over vertex position (marginalizing curvature) is followed by dense 1D voting over curvature conditioned on each detected vertex. The worst-case cost drops from $O(B^{3})$ to $O(B^{2} + k B)$ for $k$ detected anchors.
+The detector is family-conditional: the target family and its parameterization are specified in advance, as in classical Hough detection. The question we ask is whether DHT-style feature-space voting can be made tractable once a family of dimension $d>2$ is given. It is not an attempt at open-world shape discovery.
 
-Our contributions are:
+Parameter-space factorization itself is not new, since multi-stage Hough methods have a long history. What we contribute is its formulation as a differentiable deep-feature voting cascade, in which learned image features are aggregated over conditional curve hypotheses and trained through peak losses in every accumulator. We use validation-selected thresholds throughout and report an ablation of the Stage-1 pooling operator, which turns out to matter a great deal.
+
+The contributions are as follows.
 \begin{itemize}
-  \item \textbf{Method.} A factorized, cascaded deep Hough transform for parametric curve families, with marginal anchor voting, conditional shape voting, and end-to-end training via peak losses in every stage (Section~\ref{sec:method}).
-  \item \textbf{Metric.} The curve-EA score, an extension of the EA line similarity of \citet{zhao2021deep} to arbitrary parametric curves, combining a normalized sampled-point Chamfer term with a tangent agreement term (Section~\ref{sec:metric}).
-  \item \textbf{Benchmark.} A controlled, deterministically seeded synthetic benchmark generator covering parabolas, circles, and ellipses ($d=5$), with additive noise, occlusion, and distractor structures, and matched-compute baseline implementations: classical Hough, RANSAC, direct regression, and a DETR-style hypothesis-query head (Section~\ref{sec:experiments}).
-  \item \textbf{Analysis.} An interpretation of Hough voting as cross-attention with a geometry-fixed attention map, which explains when voting should beat learned queries and points toward learned hypothesis spaces as future work (Section~\ref{sec:discussion}).
+  \item \textbf{Method.} A factorized deep Hough transform for curve families with a spatial anchor, with lines as the degenerate case (Section~\ref{sec:method}), and a curve-EA similarity that extends the EA line score (Section~\ref{sec:metric}).
+  \item \textbf{Protocol.} A benchmark generator and an evaluation protocol with validation-selected thresholds, matched baselines that include tuned RANSAC for parabolas, circles and ellipses, and ablations (Sections~\ref{sec:protocol} and~\ref{sec:results}).
+  \item \textbf{Diagnosis.} A decomposition of the cascade's error into Stage 1 and Stage 2 using an oracle-anchor ceiling, top-$k$ anchor recall and an anchor-separation sweep (Section~\ref{sec:stage1}). Stage 1 is the bottleneck, and nearby anchors are a quantified failure region.
+  \item \textbf{Scope of the claim.} At $d=3$ the cascade matches a tuned RANSAC fit and at $d=5$ it is somewhat behind. What it adds is differentiable feature-space voting with memory that grows with the shape dimension only (Section~\ref{sec:memory}). We do not claim better accuracy than classical fitting.
+  \item \textbf{Real-image stress test.} A TuSimple evaluation with a structural split into near-straight and curved lanes (Section~\ref{sec:real}), reported with its limitations.
 \end{itemize}
 
 \section{Related Work}
 \paragraph{Classical Hough transforms for curves.}
-The Hough transform was introduced for bubble chamber photographs \citep{hough1962} and formalized for lines with the angle-radius parameterization \citep{duda1972}. \citet{ballard1981} generalized voting to arbitrary shapes. Dimensionality has always been the central obstacle: randomized \citep{xu1990rht} and probabilistic \citep{kiryati1991} variants subsample votes, and multi-stage methods decompose parameter spaces, for example detecting ellipse centers before axes \citep{yuen1989ellipse}. Hough methods for special classes of algebraic curves have been applied to anatomical profile extraction in CT \citep{torrente2014,massone2015}. Our cascade is the differentiable, feature-space descendant of this decomposition tradition.
+The Hough transform was introduced for bubble chamber photographs \citep{hough1962} and formalized for lines with the angle-radius parameterization \citep{duda1972}. \citet{ballard1981} generalized voting to arbitrary shapes. Dimensionality is the main obstacle. Randomized \citep{xu1990rht} and probabilistic \citep{kiryati1991} variants subsample votes, adaptive variants refine the grid \citep{illingworth1987}, and multi-stage methods split the parameter space, for example detecting ellipse centers before axes \citep{yuen1989ellipse}. Hough methods for special algebraic curves have been used for anatomical profile extraction in CT \citep{torrente2014,massone2015}. Our cascade is a differentiable, feature-space version of this decomposition. For ellipses, RANSAC with a direct conic fit \citep{fischler1981ransac,fitzgibbon1999ellipse} is a strong classical alternative, and we compare against it.
 
 \paragraph{Deep Hough methods.}
-DHT \citep{zhao2021deep} aggregates CNN features along candidate lines into $(\theta, r)$ space and detects peaks with convolutions, adding the EA metric and the NKL dataset. \citet{lin2020houghpriors} add trainable Hough line priors inside a CNN. HoughLaneNet \citep{houglanenet2023} applies a hierarchical DHT to lane detection, but the voting remains line-based, with curves recovered afterwards by dynamic convolution. Deep Hough voting has also been used for 3D object centroids in point clouds \citep{qi2019votenet}. To our knowledge no prior work performs deep feature-space voting over curve parameter spaces; this paper fills that gap.
+DHT \citep{zhao2021deep} aggregates CNN features along candidate lines into $(\theta,r)$ space, detects peaks with convolutions, and introduces the EA metric and the NKL dataset. \citet{lin2020houghpriors} add trainable Hough line priors inside a CNN. HoughLaneNet \citep{houglanenet2023} applies a hierarchical DHT to lane detection, but the voting is line-based and curves are recovered afterwards by dynamic convolution. Deep Hough voting is also used for 3D object centroids \citep{qi2019votenet}. We are not aware of prior feature-space voting over curve parameter spaces.
 
 \paragraph{Deep curve detection by regression.}
-Lane detection produced a family of direct curve regressors: PolyLaneNet \citep{polylanenet2020} regresses polynomial coefficients, LSTR \citep{lstr2021} predicts polynomial lane shapes with a DETR-style transformer, BezierLaneNet \citep{feng2022bezier} predicts cubic Bezier control points, and BSNet \citep{bsnet2023} uses B-splines. These methods sidestep the accumulator explosion by abandoning voting, at the cost of an explicit evidence surface. Our DETR-style baseline represents this family under matched conditions.
+PolyLaneNet \citep{polylanenet2020} regresses polynomial coefficients, LSTR \citep{lstr2021} predicts polynomial lane shapes with a transformer, BezierLaneNet \citep{feng2022bezier} predicts cubic Bezier control points, and BSNet \citep{bsnet2023} uses B-splines. These avoid the accumulator but also give up an explicit evidence surface. Our regression and DETR-style baselines \citep{detr2020} stand in for this family at small scale.
 
 \section{Method}
 \label{sec:method}
 
-\subsection{Preliminaries: deep Hough voting}
-Let $\mathbf{X} \in \mathbb{R}^{C \times H \times W}$ be encoder features of an image. For a curve family $\mathcal{C}$ with parameter vector $\mathbf{p} \in \mathcal{P} \subset \mathbb{R}^{d}$, define the rasterized support $\Omega(\mathbf{p}) \subset \{1, \dots, HW\}$ as the pixel set of curve $C(\mathbf{p})$ clipped to the image. Deep Hough voting aggregates
+\subsection{Deep Hough voting}
+Let $\mathbf{X}\in\mathbb{R}^{C\times H\times W}$ be encoder features. For a curve family with parameters $\mathbf{p}\in\mathcal{P}\subset\mathbb{R}^{d}$, let $\Omega(\mathbf{p})$ be the pixel set of the curve $C(\mathbf{p})$ clipped to the image. Voting computes
 \begin{equation}
-\mathbf{Y}(\mathbf{p}) = \frac{1}{|\Omega(\mathbf{p})|} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i),
+\mathbf{Y}(\mathbf{p})=\frac{1}{|\Omega(\mathbf{p})|}\sum_{i\in\Omega(\mathbf{p})}\mathbf{X}(i),
 \label{eq:vote}
 \end{equation}
-which for lines and a quantized $\mathcal{P}$ is exactly the DHT of \citet{zhao2021deep} up to normalization. Peaks of a small conv head on $\mathbf{Y}$ yield detections. Dense quantization of $\mathcal{P}$ with $B$ bins per axis makes $\mathbf{Y}$ a $C \times B^{d}$ tensor, which is the obstacle for $d \geq 3$.
+which for lines and a quantized $\mathcal{P}$ is the DHT of \citet{zhao2021deep} up to normalization. A small convolutional head on $\mathbf{Y}$ gives detections. With $B$ bins per axis, $\mathbf{Y}$ has $C\cdot B^{d}$ entries.
 
-\subsection{Parameter factorization}
-We factor $\mathbf{p} = (\mathbf{a}, \mathbf{s})$ into an \emph{anchor} $\mathbf{a}$ (a spatially meaningful subvector: parabola vertex, circle center) and a \emph{shape} vector $\mathbf{s}$ (curvature, radius, orientation). The factorization is family-specific but always available for the families we consider:
-parabola in vertex form $y = s (x - a_1)^2 + a_2$ with $\mathbf{a} = (a_1, a_2)$, $\mathbf{s} = s$;
-circle $(x - a_1)^2 + (y - a_2)^2 = s^2$ with anchor center and shape radius.
+\subsection{Parameter factorization and scope}
+We write $\mathbf{p}=(\mathbf{a},\mathbf{s})$ with an \emph{anchor} $\mathbf{a}\in\mathbb{R}^{d_1}$ (a spatial point: parabola vertex, circle or ellipse center) and a \emph{shape} $\mathbf{s}\in\mathbb{R}^{d_2}$ (curvature, radius, axes and orientation). For a vertex-form parabola $y=s(x-a_1)^2+a_2$ we have $\mathbf{a}=(a_1,a_2)$ and $\mathbf{s}=s$. For a circle, $\mathbf{a}$ is the center and $\mathbf{s}=r$. For an ellipse, $\mathbf{a}$ is the center and $\mathbf{s}=(r_x,r_y,\phi)$.
+
+The method assumes that the curve family is known and that it has a spatially meaningful anchor. Both assumptions are shared with classical Hough voting, which also searches a fixed hypothesis space, and both are by design: the accumulator needs a parameterization to index. A family without such an anchor would need a different factorization, and we do not address it.
+
+\paragraph{Lines as the degenerate case.} A line has no anchor separate from its own parameters, so $d_1=d=2$, $d_2=0$, and Stage 2 is empty. The cascade is then single-stage voting over $(\theta,\rho)$, which is the original DHT. Lines use the same encoder, training loop and detection code as the other families, and differ only in whether Stage 2 is built. This lets the real-image experiment in Section~\ref{sec:real} use one cascade for both near-straight and curved lanes.
 
 \subsection{Stage 1: marginal anchor voting}
-We build a coarse accumulator over anchors only, marginalizing shape over a small probe set $\tilde{\mathcal{S}} = \{\mathbf{s}_1, \dots, \mathbf{s}_m\}$ ($m$ small, coarse):
+Stage 1 builds an accumulator over anchors only, pooling over a small probe set $\tilde{\mathcal{S}}=\{\mathbf{s}_1,\dots,\mathbf{s}_m\}$ of shapes:
 \begin{equation}
-\mathbf{Y}_1(\mathbf{a}) = \operatorname*{pool}_{\mathbf{s} \in \tilde{\mathcal{S}}} \; \frac{1}{|\Omega(\mathbf{a}, \mathbf{s})|} \sum_{i \in \Omega(\mathbf{a}, \mathbf{s})} \mathbf{X}(i),
+\mathbf{Y}_1(\mathbf{a})=\operatorname*{pool}_{\mathbf{s}\in\tilde{\mathcal{S}}}\;\frac{1}{|\Omega(\mathbf{a},\mathbf{s})|}\sum_{i\in\Omega(\mathbf{a},\mathbf{s})}\mathbf{X}(i).
 \label{eq:stage1}
 \end{equation}
-with $\operatorname{pool}$ either max (a differentiable relaxation of "any shape fits") or mean. $\mathbf{Y}_1$ is a $C \times B_a^{2}$ tensor: 2D, cheap, and, exactly as in DHT, anchors of similar curves are neighboring bins, so a small 2D conv head aggregates context before predicting an anchor peak map $\mathbf{P}_1$.
+$\mathbf{Y}_1$ has $C\cdot B_a^{2}$ entries. A small 2D convolutional head turns it into an anchor map $\mathbf{P}_1$. The pooling operator is a design choice that matters. We compare log-sumexp and max in Section~\ref{sec:pooling}; mean pooling was not evaluated. Max pooling reads as ``some probe shape fits here'', which is the right question for localizing an anchor when the shape is unknown, and it is our default. The probe set has $m=6$ shapes for parabolas and circles, and $m=27$ for ellipses (three values per shape axis).
 
 \subsection{Stage 2: conditional shape voting}
-For each of the top-$k$ anchor peaks $\hat{\mathbf{a}}_j$ we instantiate a dense 1D (or low-dimensional) accumulator over shape:
+For each of the top-$k$ anchor peaks $\hat{\mathbf{a}}_j$ (3$\times$3 local maxima of $\mathbf{P}_1$, ranked by score), Stage 2 builds a dense accumulator over shape only:
 \begin{equation}
-\mathbf{Y}_2^{(j)}(\mathbf{s}) = \frac{1}{|\Omega(\hat{\mathbf{a}}_j, \mathbf{s})|} \sum_{i \in \Omega(\hat{\mathbf{a}}_j, \mathbf{s})} \mathbf{X}(i), \qquad \mathbf{s} \in \mathcal{S}_{\text{dense}},
+\mathbf{Y}_2^{(j)}(\mathbf{s})=\frac{1}{|\Omega(\hat{\mathbf{a}}_j,\mathbf{s})|}\sum_{i\in\Omega(\hat{\mathbf{a}}_j,\mathbf{s})}\mathbf{X}(i),\qquad \mathbf{s}\in\mathcal{S}_{\text{dense}}.
 \label{eq:stage2}
 \end{equation}
-followed by a 1D conv head and peak selection, yielding full detections $(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j)$ with scores. Total accumulator cost is $O(B_a^{2} + k B_s)$ versus $O(B^{3})$ dense; Section~\ref{sec:experiments} quantifies the gap. Sub-bin precision is recovered cheaply by soft-argmax interpolation over each detection's local neighborhood in $\mathbf{P}_1$ and $\mathbf{P}_2^{(j)}$ (implemented; Algorithm~\ref{alg:cascade}, lines 8, 10). A stronger form of refinement, re-voting both anchor and shape on a newly constructed finer grid around each detection -- the differentiable analogue of coarse-to-fine classical Hough \citep{illingworth1987} -- is not yet implemented; we describe it here as a planned extension rather than a component of the reported results, and do not include it in Algorithm~\ref{alg:cascade}.
+A convolutional head and a peak selection give the full detection $(\hat{\mathbf{a}}_j,\hat{\mathbf{s}}_j)$ with a score. Soft-argmax over the local neighborhood gives sub-bin precision in both stages. Re-voting on a finer grid around each detection, in the manner of coarse-to-fine classical Hough \citep{illingworth1987}, is not implemented, and nothing reported here uses it.
 
-\begin{proposition}[Memory complexity]
-For a curve family with parameter vector $\mathbf{p} \in \mathbb{R}^{d}$ factored as $(\mathbf{a}, \mathbf{s})$ with $\mathbf{a} \in \mathbb{R}^{d_1}$, $\mathbf{s} \in \mathbb{R}^{d_2}$, $d_1 + d_2 = d$, and $B$ quantization bins per axis, the dense accumulator of Equation~\ref{eq:vote} occupies $O(B^{d})$ entries. The cascade of Sections~3.3--3.4 occupies $O(B^{d_1} + k B^{d_2})$ entries, where $k$ is the number of anchor peaks retained. \emph{Proof.} Stage 1 (Eq.~\ref{eq:stage1}) accumulates over $\mathbf{a}$ only, marginalizing $\mathbf{s}$ over a fixed probe set $\tilde{\mathcal{S}}$ of size $m$ independent of $B$, giving a $B^{d_1}$-sized tensor. Stage 2 (Eq.~\ref{eq:stage2}) is instantiated only at the $k$ retained peaks, each contributing a $B^{d_2}$-sized tensor, giving $k B^{d_2}$ total. Summing the two stages gives the stated bound. $\blacksquare$
+\begin{proposition}[Accumulator size]
+With $\mathbf{a}\in\mathbb{R}^{d_1}$, $\mathbf{s}\in\mathbb{R}^{d_2}$, $d_1+d_2=d$ and $B$ bins per axis, the dense accumulator of Eq.~\ref{eq:vote} has $O(B^{d})$ entries, and the cascade has $O(B^{d_1}+kB^{d_2})$ entries, where $k$ is the number of retained anchors.
 \end{proposition}
+\emph{Proof.} Stage 1 accumulates over $\mathbf{a}$ only. The probe set has size $m$ independent of $B$, so Stage 1 holds $B^{d_1}$ cells per channel. Stage 2 is built at $k$ anchors and each holds $B^{d_2}$ cells per channel. $\blacksquare$
 
-For our parabola and circle families, $d_1 = 2$ (anchor) and $d_2 = 1$ (shape), so the cascade is $O(B^{2} + kB)$ against a dense $O(B^{3})$; Table~\ref{tab:memory_complexity} reports the measured accumulator sizes at our actual training configuration ($C=32$ channels, $B_a=32$ anchor bins, $B_s=48$ dense shape bins, $k=4$ retained peaks), against a dense accumulator using the same 32 bins per axis for $d=3$.
+The bound is about accumulator memory. It says nothing about accuracy, and the factorization is lossy: Stage 2 only sees anchors that Stage 1 retained. Section~\ref{sec:stage1} measures how much that costs.
 
-\begin{table}[htbp]
-\centering
-\caption{Measured accumulator memory (float32), dense vs.\ factorized, at the configuration used for all main-text results ($C=32$, $B=32$ bins/axis, $d=3$).}
-\label{tab:memory_complexity}
-\small
-\begin{tabular}{lrr}
-\toprule
-\textbf{Accumulator} & \textbf{Elements} & \textbf{Memory} \\
-\midrule
-Dense $O(B^{d})$              & 1{,}048{,}576 & 4.00 MB \\
-Stage 1 $O(B_a^{2})$          & 32{,}768     & 128.00 KB \\
-Stage 2 $O(k B_s)$            & 6{,}144      & 24.00 KB \\
-\midrule
-\textbf{Factorized total}     & \textbf{38{,}912} & \textbf{152.00 KB} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-The factorized cascade uses 26.9$\times$ less memory than the dense accumulator at $d=3$; by Proposition~1 this ratio grows with $d$, since the dense term scales as $B^{d}$ while the factorized term stays $O(B^{d_1} + kB^{d_2})$ for any fixed anchor dimensionality $d_1$. Table~\ref{tab:memory_scaling} measures this directly at our actual ellipse configuration ($d=5$): the dense accumulator's arithmetic size (not instantiated -- doing so is precisely the impracticality in question) grows $1{,}024\times$ from $d=3$ to $d=5$ at fixed $B=32$, from 4.00\,MB to 4.00\,GB, exceeding typical single-GPU memory outright; the factorized cascade's measured size grows only $1.6\times$, from 152\,KB to 236\,KB, because $d_1=2$ (the anchor) is fixed regardless of $d$ and only $d_2$ (the shape) grows with the family.
-
-\begin{table}[htbp]
-\centering
-\caption{Accumulator memory scaling from $d=3$ (parabola) to $d=5$ (ellipse) at fixed $B=32$, $C=32$. Dense sizes for $d=5$ are computed arithmetically, not instantiated.}
-\label{tab:memory_scaling}
-\small
-\begin{tabular}{lccc}
-\toprule
-& \textbf{Dense $O(B^{d})$} & \textbf{Factorized (measured)} & \textbf{Reduction} \\
-\midrule
-$d=3$ (parabola) & 4.00 MB & 152 KB & 26.9$\times$ \\
-$d=5$ (ellipse)  & 4.00 GB & 236 KB & 17{,}772.5$\times$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\emph{Remark (permutation invariance).} The voting operator $\mathbf{Y}(\mathbf{p}) = |\Omega(\mathbf{p})|^{-1} \sum_{i \in \Omega(\mathbf{p})} \mathbf{X}(i)$ is invariant to any permutation of the pixel indices within $\Omega(\mathbf{p})$, immediately from summation and the cardinality-normalizing constant both being order-independent over the finite index set $\Omega(\mathbf{p})$: Equation~\ref{eq:vote} depends only on the multiset $\{\mathbf{X}(i) : i \in \Omega(\mathbf{p})\}$, not traversal order. This property is what allows the gather-and-mean implementation (a fixed index bank per candidate curve) to be computed with no ordering assumptions and no positional encoding, unlike a learned-attention alternative over the same support.
-
-Algorithm~\ref{alg:cascade} summarizes training-time inference for one image; index banks $\Omega(\cdot)$ are precomputed once per family and resolution and reused across all images.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.95\textwidth]{accumulator_schematic.pdf}
-\caption{Dense accumulator (left) vs.\ the factorized cascade (right), drawn to scale with the measured element counts of Table~\ref{tab:memory_complexity}. The dense accumulator materializes every $(\text{anchor}, \text{shape})$ combination at once; the cascade computes a coarse 2D anchor map, retains a handful of peaks, and instantiates a dense shape accumulator only at each retained peak.}
-\label{fig:accumulator_schematic}
-\end{figure}
-
-\begin{algorithm}
+\begin{algorithm}[t]
 \caption{Factorized deep Hough cascade (inference)}
 \label{alg:cascade}
 \begin{algorithmic}[1]
-\State $\mathbf{X} \gets \text{Encoder}(\text{image})$ \Comment{$C \times H \times W$ deep features}
+\State $\mathbf{X}\gets\text{Encoder}(\text{image})$
 \For{each anchor bin $\mathbf{a}$}
-  \State $\mathbf{Y}_1(\mathbf{a}) \gets \operatorname{logsumexp}_{\mathbf{s} \in \tilde{\mathcal{S}}} \; \text{mean}_{i \in \Omega(\mathbf{a},\mathbf{s})} \mathbf{X}(i)$ \Comment{Stage 1: marginal anchor voting, Eq.~\ref{eq:stage1}}
+  \State $\mathbf{Y}_1(\mathbf{a})\gets\max_{\mathbf{s}\in\tilde{\mathcal{S}}}\ \text{mean}_{i\in\Omega(\mathbf{a},\mathbf{s})}\mathbf{X}(i)$ \Comment{Eq.~\ref{eq:stage1}}
 \EndFor
-\State $\mathbf{P}_1 \gets \text{ConvHead}_1(\mathbf{Y}_1)$; \quad $\{\hat{\mathbf{a}}_1, \ldots, \hat{\mathbf{a}}_k\} \gets \text{TopK-NMS}(\mathbf{P}_1)$
+\State $\mathbf{P}_1\gets\text{ConvHead}_1(\mathbf{Y}_1)$; \quad $\{\hat{\mathbf{a}}_1,\dots,\hat{\mathbf{a}}_k\}\gets\text{TopK-NMS}(\mathbf{P}_1)$
 \For{each retained anchor $\hat{\mathbf{a}}_j$}
-  \For{each shape bin $\mathbf{s} \in \mathcal{S}_{\text{dense}}$}
-    \State $\mathbf{Y}_2^{(j)}(\mathbf{s}) \gets \text{mean}_{i \in \Omega(\hat{\mathbf{a}}_j, \mathbf{s})} \mathbf{X}(i)$ \Comment{Stage 2: conditional shape voting, Eq.~\ref{eq:stage2}}
+  \For{each shape bin $\mathbf{s}\in\mathcal{S}_{\text{dense}}$}
+    \State $\mathbf{Y}_2^{(j)}(\mathbf{s})\gets\text{mean}_{i\in\Omega(\hat{\mathbf{a}}_j,\mathbf{s})}\mathbf{X}(i)$ \Comment{Eq.~\ref{eq:stage2}}
   \EndFor
-  \State $\mathbf{P}_2^{(j)} \gets \text{ConvHead}_2(\mathbf{Y}_2^{(j)})$; \quad $\hat{\mathbf{s}}_j \gets \text{SoftArgmaxPeak}(\mathbf{P}_2^{(j)})$
-  \State refine $(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j)$ by soft-argmax over the local neighborhood in $\mathbf{P}_1$, $\mathbf{P}_2^{(j)}$
+  \State $\mathbf{P}_2^{(j)}\gets\text{ConvHead}_2(\mathbf{Y}_2^{(j)})$; \quad $\hat{\mathbf{s}}_j\gets\text{SoftArgmaxPeak}(\mathbf{P}_2^{(j)})$
 \EndFor
-\State \textbf{return} detections $\{(\hat{\mathbf{a}}_j, \hat{\mathbf{s}}_j, \text{score}_j)\}_{j=1}^{k}$
+\State \textbf{return} $\{(\hat{\mathbf{a}}_j,\hat{\mathbf{s}}_j,\text{score}_j)\}_{j=1}^{k}$
 \end{algorithmic}
 \end{algorithm}
 
 \subsection{Training}
-Following \citet{zhao2021deep}, ground-truth curves are mapped into each accumulator, smoothed with a Gaussian kernel, and each stage is trained with binary cross-entropy against its smoothed target: anchors in $\mathbf{Y}_1$, and, for stage 2, shape targets conditioned on ground-truth anchors (teacher forcing) plus detected anchors within a matching radius. The encoder, both conv heads, and the voting layers (which are parameter-free gather-and-mean operations) train end to end. The two stage losses are summed with equal weight; stage-1 targets use a Gaussian of $\sigma = 1.5$ bins with a positive-class weight of 8, and stage-2 targets a Gaussian of $\sigma = 1.0$ bins. All runs use Adam with learning rate $2 \times 10^{-4}$, batch size 8, and 10 epochs, with fixed seeds for data generation and initialization.
+As in \citet{zhao2021deep}, ground-truth curves are mapped into each accumulator, smoothed with a Gaussian, and each stage is trained with binary cross-entropy. Stage 2 targets are conditioned on the ground-truth anchors (teacher forcing) and on detected anchors within a matching radius. The voting layers are parameter-free gather-and-mean operations, so the encoder and both heads train end to end. The two losses are summed with equal weight. Stage-1 targets use a Gaussian of $\sigma=1.5$ bins and a positive-class weight of 8, and Stage-2 targets use $\sigma=1.0$ bins. All runs use Adam with learning rate $2\times10^{-4}$, batch size 8 and 10 epochs. The anchor grid has $B_a=32$ bins per axis and the dense shape grid $B_s=48$ bins, with $C=32$ channels and $k=4$.
 
 \section{The Curve-EA Score}
 \label{sec:metric}
-The EA score of \citet{zhao2021deep} multiplies an angular and a midpoint distance term, both specific to lines. For curves $c_1, c_2$ we sample $T$ points $\{u_t^{(1)}\}, \{u_t^{(2)}\}$ uniformly in arc length inside the image and define a normalized symmetric Chamfer term
+The EA score of \citet{zhao2021deep} multiplies an angular and a midpoint distance term, both specific to lines. For curves $c_1,c_2$ we sample $T$ points $\{u^{(1)}_t\},\{u^{(2)}_t\}$ uniformly in arc length inside the image and define a normalized symmetric Chamfer term
 \begin{equation}
-\mathcal{S}_d = 1 - \min\!\left(1, \; \frac{\operatorname{CD}(\{u^{(1)}\}, \{u^{(2)}\})}{D_{\max}}\right),
+\mathcal{S}_d=1-\min\!\left(1,\frac{\operatorname{CD}(\{u^{(1)}\},\{u^{(2)}\})}{D_{\max}}\right),
 \end{equation}
 with $D_{\max}$ the image diagonal times a constant, and a tangent agreement term
 \begin{equation}
-\mathcal{S}_\theta = 1 - \frac{1}{T} \sum_t \frac{\angle\big(\tau_1(u_t^{(1)}), \tau_2(\pi(u_t^{(1)}))\big)}{\pi / 2},
+\mathcal{S}_\theta=1-\frac{1}{T}\sum_t\frac{\angle\big(\tau_1(u^{(1)}_t),\tau_2(\pi(u^{(1)}_t))\big)}{\pi/2},
 \end{equation}
-where $\tau$ denotes unit tangents and $\pi(\cdot)$ nearest-point correspondence. The curve-EA score is $\mathcal{S} = (\mathcal{S}_d \cdot \mathcal{S}_\theta)^{2}$, which reduces to behavior closely matching EA for straight lines and inherits its $[0, 1]$ range and sharpened top end. Evaluation uses Hungarian bipartite matching between predictions and ground truth exactly as in \citet{zhao2021deep}, reporting average precision, recall, and F-measure over thresholds. % TODO: sanity experiments comparing curve-EA with Chamfer and EMD.
+where $\tau$ are unit tangents and $\pi(\cdot)$ is nearest-point correspondence. The score is $\mathcal{S}=(\mathcal{S}_d\cdot\mathcal{S}_\theta)^2$ in $[0,1]$. Predictions and ground truth are matched by the Hungarian algorithm and precision, recall and F are averaged over a grid of similarity thresholds, as in \citet{zhao2021deep}. Because the grid includes lenient thresholds, a detection whose anchor is a few pixels off can still count as a match. This matters when reading the anchor-recall numbers below.
 
-\section{Experiments}
-\label{sec:experiments}
-\paragraph{Benchmark.} Images of size $128 \times 128$ (main-text results below use $64 \times 64$; see Limitations) containing one to three curves from a family (parabolas, circles, ellipses), rendered with stroke width 2, plus: Gaussian pixel noise, random occluding rectangles removing up to 40\% of curve support, and distractor line segments. Splits: 8,000 train, 1,000 val, 1,000 test per family. Figure~\ref{fig:benchmark_examples} shows representative clean and corrupted examples for each family.
+\section{Evaluation Protocol}
+\label{sec:protocol}
+\paragraph{Benchmark.} Images are $64\times64$ in all reported results (the generator supports $128\times128$). Each image has one to three curves from one family, drawn with stroke width 2, plus Gaussian pixel noise ($\sigma_n=0.08$ unless varied), up to two random occluding rectangles ($\text{occ\_max}=2$), and up to three distractor line segments. Figure~\ref{fig:benchmark_examples} shows examples.
 
-\begin{figure}[htbp]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.85\textwidth]{benchmark_examples.png}
-\caption{Representative benchmark images, clean (top) and corrupted (bottom: noise, occlusion, distractor segments), for each curve family.}
+\includegraphics[width=0.8\linewidth]{figures/benchmark_examples.png}
+\caption{Benchmark images, clean (top) and corrupted (bottom: noise, occlusion, distractor segments), for each curve family.}
 \label{fig:benchmark_examples}
 \end{figure}
 
-\paragraph{Baselines.} (i) Classical: Sobel edges plus dense classical Hough voting at matched quantization; (ii) RANSAC curve fitting on edge points; (iii) direct regression: same encoder, MLP head predicting up to three parameter vectors with permutation-matched L1 loss; (iv) hypothesis queries: same encoder, DETR-style decoder with $K$ learned queries and Hungarian matching, sized to match our head's parameter count.
+\paragraph{Splits and seeds.} Each run trains on 1{,}000 images and uses a validation split of 200 images and a test split of 200 images, all drawn from the same generator with different seeds. The seed of a run changes model initialization, data order and the three image draws, so the standard deviations we report over seeds include data variance. Differences below about 0.02 F are within noise at this size: two runs of the same configuration and seed gave 0.706 and 0.690.
 
-\paragraph{Results.} We report, per family and corruption level: curve-EA average precision, recall, and F-measure (Hungarian-matched, thresholds swept as in \citet{zhao2021deep}); measured accumulator memory, dense $O(B^{d})$ versus our $O(B^{d_1} + kB^{d_2})$ (Proposition 1), including a no-factorization control that we expect to hit memory or runtime limits at $B \geq 32$ for $d=3$; and the following ablations, each varying one factor with the rest fixed at the main-result setting: (i) Stage-1 pooling, max vs.\ mean vs.\ log-sum-exp; (ii) probe set size $m \in \{4, 8, 16, 32\}$; (iii) retained anchor peaks $k \in \{1, 2, 4, 8\}$; (iv) additive noise level $\sigma_n \in \{0, 0.1, 0.2, 0.4\}$; (v) occlusion fraction $\in \{0, 0.2, 0.4, 0.6\}$.
+\paragraph{Threshold selection.} A detection is kept if its score is at least a threshold $\tau$. We sweep $\tau$ over $\{0.05,0.10,\dots,0.95\}$ on the validation split, pick the best, and score the test split once at that value. As a check we also run a test-set sweep and report how much it would have overstated F. Across all runs reported here the gap is between 0.000 and 0.011, so the choice of protocol changes the numbers little.
 
-Table~\ref{tab:parabola_interim} reports measured results for our method on the parabola family at $64 \times 64$ resolution, at both the standard corrupted setting (noise, occlusion, up to 3 distractor segments, 1--3 curves per image) and a clean control (no corruption, exactly one curve per image), both evaluated over 200 test images. Table~\ref{tab:circle_interim} reports the corrupted setting for circles at the same resolution (threshold chosen by the same sweep protocol). Table~\ref{tab:baseline_interim} reports the four baselines on the corrupted parabola setting. Table~\ref{tab:ellipse_interim} reports the higher-dimensional ellipse family ($d=5$) at both settings. % TODO: ellipse baselines, 128x128 scale-up, ablations i-v.
+\paragraph{Baselines.} All baselines use the same images, metric and splits.
+\begin{itemize}
+  \item \emph{RANSAC} on Sobel edge points: a 3-point minimal solver for parabolas and circles, and a 5-point conic fit with Sampson distance for ellipses \citep{fitzgibbon1999ellipse,hartley2004mvg}. \emph{Tuned} RANSAC keeps candidates whose inlier count passes a threshold chosen on validation, which is the treatment the learned detectors get. \emph{Untuned} RANSAC always keeps the top four candidates.
+  \item \emph{Classical dense Hough} on Sobel edges, with a tuned accumulator threshold. It runs at 16 anchor bins and 16 shape bins, coarser than the cascade's 32, so it is handicapped. It is not run for ellipses, where a dense 5D accumulator is infeasible at useful resolution.
+  \item \emph{Direct regression}: the same encoder and an MLP head that predicts up to three parameter vectors, trained with a permutation-matched L1 loss.
+  \item \emph{DETR-lite queries}: the same encoder and a small DETR-style decoder with learned queries and Hungarian matching.
+\end{itemize}
+The two learned baselines get the same 1{,}000 training images and 10 epochs as the cascade. They are small models trained with a small budget, so their numbers describe this regime and should not be read as a bound on what regression or query heads can do with more data.
 
-\begin{table}[htbp]
+\section{Results}
+\label{sec:results}
+
+\subsection{Comparison with baselines}
+Table~\ref{tab:main} gives F on the corrupted benchmark for seed 0. All methods see the same 200 test images.
+
+\begin{table}[t]
 \centering
-\caption{Factorized DHT on parabolas, $64\times64$, threshold $\tau = 0.55$ (chosen by sweep over $\{0.15,\ldots,0.75\}$). Matched curve-EA similarity is reported over Hungarian-matched pairs only ($n$ pairs).}
-\label{tab:parabola_interim}
-\small
-\begin{tabular}{lccccc}
-\toprule
-\textbf{Setting} & \textbf{P} & \textbf{R} & \textbf{F} & \textbf{median matched sim.} & \textbf{p10 matched sim.} \\
-\midrule
-Corrupted (main) & 0.469 & 0.595 & 0.525 & 0.80 & 0.10 \\
-Clean control     & 0.605 & 0.702 & 0.650 & 0.88 & 0.67 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[htbp]
-\centering
-\caption{Factorized DHT on circles, corrupted setting, $64\times64$, threshold $\tau=0.75$ (best of sweep).}
-\label{tab:circle_interim}
+\caption{F on the corrupted benchmark, $64\times64$, seed 0, thresholds selected on validation. ``n.r.'' means not run. Differences below about 0.02 are within test noise. Over three seeds the parabola cascade with max pooling scores $0.696\pm0.011$ (Table~\ref{tab:pool}).}
+\label{tab:main}
 \small
 \begin{tabular}{lccc}
 \toprule
-\textbf{Setting} & \textbf{P} & \textbf{R} & \textbf{F} \\
+\textbf{Method} & \textbf{Parabola ($d=3$)} & \textbf{Circle ($d=3$)} & \textbf{Ellipse ($d=5$)} \\
 \midrule
-Corrupted (main) & 0.546 & 0.521 & 0.533 \\
+Factorized DHT, max pool (ours)  & 0.706 & 0.743 & 0.382 \\
+Factorized DHT, log-sumexp       & 0.519 & n.r. & 0.319 \\
+RANSAC, tuned                    & 0.702 & 0.742 & 0.410 \\
+RANSAC, untuned (top 4)          & 0.551 & 0.584 & 0.383 \\
+Classical dense Hough, tuned     & 0.609 & n.r. & infeasible \\
+Direct regression                & 0.151 & n.r. & n.r. \\
+DETR-lite queries                & 0.131 & n.r. & n.r. \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{table}[htbp]
+Three observations follow. First, the cascade with max pooling ties a tuned RANSAC fit at $d=3$ on both parabolas and circles. On ellipses it is 0.03 behind. We read the ellipse gap as real but small, since it sits near the test-noise level and we have one seed. Second, tuning matters for the baselines as much as for the cascade. Untuned RANSAC loses about 0.15 F on parabolas and circles because it always emits four candidates. Third, the regression and query heads score 0.15 and 0.13 on parabolas, about a fifth of the geometric methods. We have not run them on circles and ellipses. We suspect the gap reflects the difficulty of predicting exact parameters from pooled features when several curves, occlusion and distractors share the image, but a small training budget also contributes, and this experiment does not separate the two.
+
+\subsection{Stage-1 pooling}
+\label{sec:pooling}
+Table~\ref{tab:pool} varies the pooling operator in Eq.~\ref{eq:stage1} on parabolas over three seeds.
+
+\begin{table}[t]
 \centering
-\caption{Factorized DHT on ellipses ($d=5$: $x_0, y_0, r_x, r_y, \phi$), $64\times64$. Thresholds chosen by sweep, best F reported per setting.}
-\label{tab:ellipse_interim}
+\caption{Stage-1 pooling over probe shapes, parabola, corrupted benchmark, mean $\pm$ std over seeds. Anchor recall at $k=4$ uses a tolerance of one anchor bin (about 2 px).}
+\label{tab:pool}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Pooling} & \textbf{val F} & \textbf{test F} & \textbf{anchor recall@4} \\
+\midrule
+max        & $0.697\pm0.024$ & $0.696\pm0.011$ & 0.765 \\
+log-sumexp & $0.533\pm0.016$ & $0.511\pm0.006$ & 0.494 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Max pooling is better by about 0.18 F and by 0.27 in anchor recall, and the effect is far larger than the seed variation. Max was chosen on validation F using seeds 1 and 2 (0.710 against 0.539) and then confirmed with seed 0. Log-sumexp softens the max over probe shapes, which appears to blur the anchor map when several probe shapes fit partially.
+
+\subsection{Where the cascade loses accuracy}
+\label{sec:stage1}
+Stage 2 only runs at anchors that Stage 1 retains, so a missed or misplaced anchor cannot be repaired. We measure this in three ways, all for parabolas with max pooling and seed 0.
+
+\paragraph{Oracle-anchor ceiling.} Running Stage 2 at the ground-truth anchors, with Stage 1 removed, gives F $=0.938$, against $0.706$ for the real pipeline. Stage 1 costs 0.232 F, and Stage 2 is not the limiting stage.
+
+\paragraph{Top-$k$ anchor recall.} For each $k$ we count ground-truth curves whose anchor is matched, one to one, by one of the $k$ strongest Stage-1 peaks within a tolerance in anchor bins (Table~\ref{tab:recall}, Figure~\ref{fig:stage1}). Exact-bin recall is low (0.29 at $k=4$), but with a one-bin tolerance it is 0.80, and most of the gain comes between $k=1$ and $k=4$. This is a strict localization measure and not a bound on recall in the F metric, which accepts detections whose anchor is a few pixels off.
+
+\begin{table}[t]
+\centering
+\caption{Top-$k$ Stage-1 anchor recall, parabola, max pooling, seed 0. Tolerance is in anchor bins (1 bin is about 2 px).}
+\label{tab:recall}
 \small
 \begin{tabular}{lcccc}
 \toprule
-\textbf{Setting} & \textbf{P} & \textbf{R} & \textbf{F} & \textbf{drop from clean} \\
+\textbf{Tolerance} & $k=1$ & $k=2$ & $k=4$ & $k=8$ \\
 \midrule
-Clean control     & 0.690 & 0.672 & 0.681 & --- \\
-Corrupted (main)   & 0.350 & 0.311 & 0.329 & $-0.352$ (51.7\% relative) \\
+0 bins & 0.189 & 0.263 & 0.288 & 0.291 \\
+1 bin  & 0.452 & 0.684 & 0.796 & 0.811 \\
+2 bins & 0.472 & 0.724 & 0.883 & 0.903 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Notably, the ellipse clean-control F (0.681) exceeds the parabola clean-control F (0.650, Table~\ref{tab:parabola_interim}) despite ellipse's substantially larger parameter space ($d=5$ vs.\ $d=3$) and 3-dimensional shape accumulator (vs.\ 1-dimensional for parabola and circle), supporting the claim that the factorization's clean-setting accuracy does not degrade with dimensionality on its own. The corrupted setting tells a different, and equally important, story: ellipse's absolute drop from clean to corrupted (0.352) is nearly three times parabola's (0.125, 19.2\% relative), so while factorized voting remains \emph{tractable} at $d=5$ (Proposition~1, and the fact that training and inference complete at all where a dense accumulator would not), its \emph{robustness to partial evidence} degrades faster as shape dimensionality grows. This is intuitive: an occluded arc of an ellipse constrains a joint $(r_x, r_y, \phi)$ far more weakly than an occluded arc of a circle constrains a single radius, so the same occlusion fraction removes proportionally more identifying evidence at higher $d$. We report this as an honest limitation rather than a result to be smoothed over; the coarse-to-fine re-voting refinement described but not yet implemented (Section~\ref{sec:method}) is a plausible mitigation, since it would let the model recover shape precision from whatever partial evidence survives occlusion rather than relying on a single coarse-to-dense pass. % TODO: ellipse baselines (RANSAC 5-point conic fit is the key comparison) to establish whether this degradation is specific to our method or a property of the corrupted setting at this dimensionality generally.
+\paragraph{Anchor separation.} We generate images with two curves whose anchors are $\text{sep}$ pixels apart and with different shape parameters, and measure anchor recall at $k=4$ and F (Table~\ref{tab:sep}). Recall and F are flat below about 8 px and rise above it. Anchors closer than about four anchor bins fall inside the $3\times3$ peak window and merge into one Stage-1 peak, which costs roughly 0.2 F. This is a concrete failure region of the current design, and the one to fix first.
 
-\begin{figure}[htbp]
+\begin{table}[t]
 \centering
-\includegraphics[width=0.32\textwidth]{stage1_heatmap_ellipse.png}
-\includegraphics[width=0.32\textwidth]{stage2_profile_ellipse.png}
-\includegraphics[width=0.32\textwidth]{qualitative_ellipse.png}
-\caption{The same three views as Figure~\ref{fig:qualitative_parabola}, for a corrupted-setting ellipse example with two overlapping curves and partial occlusion. In contrast to the parabola case, the Stage-1 anchor accumulator (left) is diffuse rather than sharply peaked, since an ellipse's center is far more weakly indicated by summed features than a parabola's vertex; the Stage-2 shape profile (center) is noisy and multimodal, with the predicted peak landing well away from the true shape bin; and the resulting detections (right) visibly undersize and mislocalize both ellipses. This example illustrates, rather than merely states, the robustness gap discussed above (Table~\ref{tab:ellipse_interim}).}
-\label{fig:qualitative_ellipse}
+\caption{Two curves with anchors $\text{sep}$ pixels apart, noise only, threshold 0.55, parabola, max pooling.}
+\label{tab:sep}
+\small
+\begin{tabular}{lcccccccc}
+\toprule
+sep (px) & 0 & 2 & 4 & 6 & 8 & 12 & 16 & 24 \\
+\midrule
+anchor recall@4 & 0.475 & 0.482 & 0.492 & 0.525 & 0.568 & 0.812 & 0.870 & 0.912 \\
+F               & 0.584 & 0.588 & 0.584 & 0.582 & 0.640 & 0.746 & 0.779 & 0.809 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figures/stage1_diagnostics.pdf}
+\caption{Stage-1 diagnostics for parabolas with max pooling (Tables~\ref{tab:recall} and~\ref{tab:sep}). Left: top-$k$ anchor recall for three tolerances. Right: F and anchor recall as two anchors approach each other. The dotted line marks 8 px.}
+\label{fig:stage1}
 \end{figure}
 
-\paragraph{Qualitative results.}
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=0.32\textwidth]{stage1_heatmap_parabola.png}
-\includegraphics[width=0.32\textwidth]{stage2_profile_parabola.png}
-\includegraphics[width=0.32\textwidth]{qualitative_parabola.png}
-\caption{Stage-1 anchor accumulator (left), Stage-2 shape profile at the top peak (center), and the resulting detection against ground truth (right), for a representative parabola test image. The anchor peak lands on the true vertex and the shape profile is sharply peaked near the true curvature bin, giving a near-pixel-tight fit.}
-\label{fig:qualitative_parabola}
-\end{figure}
+\subsection{Number of retained anchors}
+\label{sec:ablations}
+Table~\ref{tab:ablate} varies the number $k$ of Stage-1 peaks passed to Stage 2 for parabolas with max pooling and seed 0. One trained model is evaluated at all four values of $k$, so the rows differ only in how many anchors Stage 2 sees. Probe-set size, noise level, occlusion level and mean pooling were not evaluated (Section~\ref{sec:limitations}).
 
-\begin{table}[htbp]
+\begin{table}[t]
 \centering
-\caption{Baselines on the corrupted parabola setting, matched conditions (same $64\times64$ benchmark, same curve-EA metric). Classical Hough and RANSAC emit a fixed top-4 hypotheses per image (no learned confidence threshold); regression and query are trained for 10 epochs on 1{,}000 images, with detection threshold chosen by sweeping $\{0.3,\ldots,0.9\}$ and reporting the best F (Section~\ref{sec:experiments} details the parameter-scale and class-imbalance fix applied to the matching loss before these numbers were produced).}
-\label{tab:baseline_interim}
+\caption{Retained anchors $k$, parabola, corrupted benchmark, max pooling, seed 0, one trained model. Thresholds are selected on validation. Anchor recall uses a tolerance of one bin. This model scored 0.690 at $k=4$, while the run in Table~\ref{tab:main} with the same seed scored 0.706 (see text).}
+\label{tab:ablate}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+$k$ & \textbf{val F} & \textbf{test F} & \textbf{P} & \textbf{R} & \textbf{anchor recall} & \textbf{threshold} \\
+\midrule
+1 & 0.522 & 0.560 & 0.828 & 0.423 & 0.446 & 0.05 \\
+2 & 0.649 & 0.684 & 0.751 & 0.628 & 0.666 & 0.55 \\
+4 & 0.674 & 0.690 & 0.666 & 0.717 & 0.786 & 0.55 \\
+8 & 0.671 & 0.684 & 0.652 & 0.719 & 0.804 & 0.55 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Going from $k=1$ to $k=2$ adds 0.12 F and going to $k=4$ adds a further 0.006, which is within noise, and $k=8$ adds nothing. Anchor recall keeps rising slightly (0.786 to 0.804) while F does not. With one anchor, recall is low because images hold up to three curves. Beyond two anchors the extra candidates are mostly duplicates or near-misses of curves already found, and they lower precision as much as they raise recall. This agrees with the diagnosis above: more retained peaks do not repair a mislocalized or merged anchor, so the fix has to be in Stage 1 itself and not in $k$.
+
+Two runs of the same configuration and seed gave 0.706 (Table~\ref{tab:main}) and 0.690 here, a spread of 0.016 that we have not traced, probably nondeterministic GPU kernels. We therefore treat single-run differences below about 0.02 as noise throughout.
+
+\subsection{Accumulator memory}
+\label{sec:memory}
+Table~\ref{tab:memory} gives accumulator sizes in float32 at the configuration above ($C=32$, $B=32$ bins per axis). The factorized sizes are measured. The dense $d=5$ size is arithmetic, because the accumulator is not instantiated. No dense accumulator was trained for $d\ge4$ in this work, so the comparison below is about memory and not about accuracy.
+
+\begin{table}[t]
+\centering
+\caption{Accumulator memory (float32), dense versus factorized, $C=32$, $B=32$. Dense sizes for $d=5$ are computed, not instantiated.}
+\label{tab:memory}
+\small
+\begin{tabular}{lrrr}
+\toprule
+& \textbf{Dense $O(B^{d})$} & \textbf{Factorized} & \textbf{Ratio} \\
+\midrule
+$d=3$ (parabola), Stage 1 128 KB + Stage 2 24 KB & 4.00 MB & 152 KB & 26.9$\times$ \\
+$d=5$ (ellipse)                                   & 4.00 GB & 236 KB & 17{,}772$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+From $d=3$ to $d=5$ the dense accumulator grows by $32^{2}=1{,}024\times$ while the factorized one grows $1.6\times$, because the anchor stays two-dimensional and only the shape grows. A dense $d=5$ accumulator of about 4 GB would not fit alongside a network on a typical single GPU, which is the practical reason dense voting stops at about $d=3$. Classical Hough avoids it by coarse grids or by multi-stage schemes, which is the same idea in non-differentiable form. The measured ellipse results show that the cascade still works at $d=5$, with F $0.382$ against $0.410$ for tuned RANSAC. They do not show that it beats a dense accumulator in accuracy, since we did not run one.
+
+\emph{Remark.} Eq.~\ref{eq:vote} depends only on the multiset of features over $\Omega(\mathbf{p})$, so the voting layer needs no ordering or positional encoding. It is a fixed gather-and-mean.
+
+\section{TuSimple Stress Test}
+\label{sec:real}
+We also ran the cascade on TuSimple \citep{tusimple2017}, a dashcam lane dataset, letterboxed to $128\times128$. This is a feasibility check on real photographs. It is not a competitive lane-detection benchmark, and the results below are weaker in evidence than the synthetic ones above: they come from one run per setting, they predate the validation-threshold protocol of Section~\ref{sec:protocol}, and we have not evaluated the published lane detectors or the DHT-based lane method of related work under our metric. Those methods report the official TuSimple accuracy, which our curve-EA F is not comparable to, so we give no side-by-side numbers.
+
+\subsection{A structural split}
+TuSimple labels lanes as polylines. We fit each lane to a parabola $x=a(y-y_0)^2+x_0$ by least squares. Of 10{,}889 lanes with at least three labeled points, 3{,}823 (35.1\%) give a numerically stable fit and 7{,}066 (64.9\%) are close to straight, so the vertex-form conversion is unstable. We checked this by bounding the fitted vertex against the image extent, not by a curvature threshold alone, which let unstable fits through. We send near-straight lanes to the line family (no Stage 2) and curved lanes to the parabola family, and train and evaluate the two as separate models. A single detector that handles both regimes in one image is not implemented, and the two-model setup is a limitation.
+
+A second issue appeared when we inspected Stage-1 outputs on real data. A parabola fit can be stable while its vertex lies outside the photographed scene. Our anchor grid covers only the image, so such targets cannot be learned. We drop lanes whose transformed vertex is more than half an image dimension outside the frame. On held-out curved lanes this roughly doubled F relative to training on the unfiltered set, and training on the smaller filtered set did better than training on the larger one.
+
+\subsection{Results}
+\begin{table}[t]
+\centering
+\caption{TuSimple, held-out data, one run per setting. Near-straight lanes use the line family and curved lanes the parabola family. The RANSAC baseline uses the same Sobel edges and the same split but, like the untuned RANSAC in Table~\ref{tab:main}, keeps a fixed number of candidates.}
+\label{tab:real}
 \small
 \begin{tabular}{lccc}
 \toprule
-\textbf{Method} & \textbf{P} & \textbf{R} & \textbf{F} \\
+\textbf{Regime} & \textbf{\% of lanes} & \textbf{F (ours)} & \textbf{F (RANSAC, untuned)} \\
 \midrule
-Classical dense Hough & 0.362 & 0.738 & 0.486 \\
-RANSAC                & 0.417 & 0.814 & 0.551 \\
-Direct regression      & 0.138 & 0.181 & 0.157 \\
-DETR-lite queries      & 0.091 & 0.185 & 0.122 \\
-\midrule
-Factorized DHT (ours)  & 0.469 & 0.595 & 0.525 \\
+Near-straight (line) & 64.9\% & 0.50 & 0.25 \\
+Curved (parabola)    & 35.1\% & 0.09 to 0.18 & not run \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Two findings temper and sharpen the paper's framing. First, RANSAC is competitive with, and on raw F slightly exceeds, our method at this dimensionality ($d=3$): this is expected rather than a weakness of factorized voting, since RANSAC's 3-point minimal solver is exact and cheap for parabolas and circles specifically. The motivation for factorized deep voting is not to outperform a well-matched classical method on a family where classical methods already have closed-form minimal solvers; it is to remain \emph{tractable} on families where no such solver exists or where the accumulator itself is the obstacle (Section~\ref{sec:intro}), which $d=3$ toy families do not yet test. We revisit this directly once ellipse ($d=5$) results are available.
+On near-straight lanes the line model reaches F $=0.50$ (mean matched similarity 0.58, median 0.67), against 0.253 for the RANSAC line baseline. The synthetic results show that an untuned RANSAC loses about 0.15 F relative to a tuned one (0.551 against 0.702), so the factor of two over RANSAC here is probably an overstatement of the real advantage. A tuned RANSAC line baseline on TuSimple is a necessary rerun.
 
-Second, and more informative, both learned baselines that lack an explicit geometric parameterization of the hypothesis space collapse far more severely under clutter and occlusion than every geometrically-structured method, classical or deep: direct regression (F 0.157) and DETR-lite hypothesis queries (F 0.122) each score roughly a third of classical Hough, RANSAC, and our method. The gap is not primarily one of detection confidence, since both baselines' best operating point was found by an exhaustive threshold sweep; it reflects the underlying difficulty of predicting exact curve parameters from a single pooled or attended feature vector when multiple curves, occlusion, and distractor structures share the image, with no explicit mechanism enforcing that a prediction actually lies on evidence. This separates two axes that are easy to conflate: \emph{geometric structure vs.\ free-form prediction}, and \emph{classical vs.\ deep features}. Our results place the first axis, not the second, as the dominant factor at this scale: any method that explicitly parameterizes and searches or votes over a geometric hypothesis space, whether by exact algebraic solving (RANSAC), brute-force accumulation (classical Hough), or differentiable factorized voting (ours), substantially outperforms free-form parameter regression or attention-based hypothesis queries under clutter. Factorized deep voting's distinguishing advantage over the classical geometric methods is not raw accuracy at $d=3$ but end-to-end differentiability and, by Proposition 1, tractability at dimensionalities where RANSAC's minimal-point solvers and dense Hough's accumulators both become impractical.
+On curved lanes the result is weak and varies from run to run (F between 0.09 and 0.18). The Stage-1 heatmaps on real images are sharp and confident, unlike the diffuse synthetic ellipse case, so the cause does not look like a capacity limit of the voting. We suspect the small training pool (about 1{,}500 to 1{,}800 images after filtering) and the off-frame vertices the filter does not remove, but we have not tested either. We did not average over seeds.
 
-\section{Discussion: voting as geometry-constrained attention}
+\section{Discussion: Voting as Geometry-Constrained Attention}
 \label{sec:discussion}
-Equation~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathbf{p}$ attends to pixel tokens with a hard, non-learned attention map: weight $1 / |\Omega(\mathbf{p})|$ on pixels of $C(\mathbf{p})$ and zero elsewhere. A DETR decoder replaces this with learned similarity, gaining flexibility and losing the geometric prior; our experiments (Table~\ref{tab:baseline_interim}) quantify the price of that trade under clutter and occlusion. Table~\ref{tab:attention_compare} summarizes the contrast.
+Eq.~\ref{eq:vote} is a cross-attention read-out in which hypothesis $\mathbf{p}$ attends to pixel tokens with a fixed attention map: weight $1/|\Omega(\mathbf{p})|$ on the curve's pixels and zero elsewhere. A DETR decoder learns this map. That gives it flexibility and removes the geometric prior. Table~\ref{tab:attention_compare} summarizes the contrast. Our parabola numbers (Table~\ref{tab:main}) are consistent with the prior helping at small scale, but, as noted above, they do not isolate the prior from the training budget.
 
-\begin{table}[htbp]
+\begin{table}[t]
 \centering
-\caption{Hough voting and transformer cross-attention as instances of the same read-out, differing in where the hypothesis space and attention weights come from.}
+\caption{Hough voting and transformer cross-attention as read-outs that differ in where the hypothesis space and attention weights come from.}
 \label{tab:attention_compare}
 \small
-\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
+\begin{tabularx}{\linewidth}{@{}l>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}X@{}}
 \toprule
-& \textbf{Deep Hough voting (this work)} & \textbf{Transformer query decoding (DETR-lite)} \\
+& \textbf{Deep Hough voting (this work)} & \textbf{Query decoding (DETR-lite)} \\
 \midrule
 Hypothesis space & Fixed geometric parameterization & Learned embeddings \\
-Attention weights & Geometry-determined (in support or not) & Learned via softmax similarity \\
-Support pattern & Sparse, exactly the curve's pixels & Dense, over all tokens \\
-Accumulator & Interpretable: indexed by $(\mathbf{a}, \mathbf{s})$ & Latent, not directly indexed by geometry \\
-Failure mode under clutter & Degrades with the evidence itself & Degrades with query-token similarity noise \\
+Attention weights & Set by geometry (in support or not) & Learned softmax similarity \\
+Support & Sparse, exactly the curve's pixels & Dense, all tokens \\
+Accumulator & Indexed by $(\mathbf{a},\mathbf{s})$ & Latent \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-This view suggests a spectrum: fixed geometric attention (this work), attention restricted to geometric supports but with learned per-pixel weights, and fully learned hypothesis embeddings that dispense with explicit parameterizations. The latter would extend voting beyond geometry, to structured hypothesis spaces such as graph motifs, which we leave to future work.
+This suggests a spectrum from fixed geometric attention, through geometric supports with learned per-pixel weights, to fully learned hypothesis embeddings. The last would let voting extend to hypothesis spaces that are not geometric, which we leave open.
 
+\FloatBarrier
 \section{Limitations}
-Our benchmark is synthetic; transfer to natural and medical images is untested. All main-text results are at $64 \times 64$ resolution rather than the $128 \times 128$ the benchmark supports, a smaller-scale stand-in adopted for compute budget during rapid iteration; qualitative trends (parabola vs.\ ellipse degradation, geometric vs.\ free-form baselines) are expected to hold at $128 \times 128$ but have not yet been confirmed there. The factorization requires a spatially meaningful anchor, which exists for conics and vertex-form polynomials but not obviously for every family. Stage 2 conditions on stage 1 peaks, so anchor misses are currently unrecoverable; the coarse-to-fine re-voting refinement described but not yet implemented in Section~\ref{sec:method} is the most direct planned mitigation.
+\label{sec:limitations}
+\begin{itemize}
+  \item \textbf{Family-conditional detection.} The target family is specified at inference time. This is deliberate and matches classical Hough voting, which also needs a parameterization of what it looks for, but it excludes open-world shape discovery and free-form curves. The factorization also needs a spatially meaningful anchor. A family-agnostic system could treat the family as another discrete hypothesis variable or learn a library of hypothesis spaces, which we do not attempt.
+  \item \textbf{Stage 1 is the bottleneck.} The oracle ceiling of 0.938 against 0.706 shows that most of the remaining error is anchor localization. Anchors within about 8 px merge and cost about 0.2 F. Coarse-to-fine refinement and a multi-peak Stage 2 are the planned fixes and neither is implemented.
+  \item \textbf{No accuracy advantage over classical fitting.} The cascade ties tuned RANSAC at $d=3$ and is slightly behind at $d=5$. Its benefit is differentiable feature-space voting and low accumulator memory. We did not train or evaluate a dense accumulator at $d\ge4$, so the memory ratio is not an accuracy comparison.
+  \item \textbf{Seeds and coverage.} The baseline comparison in Table~\ref{tab:main} is one seed. Only the pooling ablation has three seeds. Circle and ellipse have no ablations, and the learned baselines were run for parabolas only. The ablations cover pooling and the number of retained anchors on parabolas only. Probe-set size, noise level, occlusion level and mean pooling were not evaluated.
+  \item \textbf{Scale and data.} All main results are at $64\times64$ with 1{,}000 training images and 10 epochs. The benchmark is synthetic, and trends at $128\times128$ are untested. The regression and query baselines are small and briefly trained, so their gap to the geometric methods is specific to this budget.
+  \item \textbf{Real images.} The TuSimple results are single runs predate the validation-threshold protocol, use an untuned RANSAC baseline, and handle near-straight and curved lanes with two separate models. Published lane detectors are not evaluated.
+\end{itemize}
 
 \section{Conclusion}
-We generalized the Deep Hough Transform beyond straight lines with a factorized cascade of feature-space voting stages, an extended agreement metric, and a controlled benchmark, and showed that explicit geometric voting remains competitive with, and under clutter preferable to, learned query decoders at matched compute.
+A deep Hough transform need not enumerate the full curve parameter space. If a curve family admits a spatial anchor, feature-space voting can be factorized into anchor localization followed by conditional shape voting, which reduces accumulator memory from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$ and makes DHT-style voting memory-feasible for families beyond lines. With max pooling over probe shapes, the cascade matches a tuned RANSAC fit on synthetic parabolas and circles, is slightly behind on ellipses, and needs 236\,KB of accumulator memory at $d=5$ where a dense accumulator would need about 4\,GB. Its remaining error sits in Stage 1: Stage 2 reaches F $=0.938$ at the ground-truth anchors, and nearby anchors that merge into one peak are the concrete failure mode. Detection of an unspecified family is outside the scope of this work. Natural next steps are an improved Stage 1, robustness sweeps over noise and occlusion, and a comparison with published lane detectors under their own metric. Code, configurations and the benchmark generator are released with the commands for every table.
 
-The present work should be viewed as establishing the feasibility of differentiable Hough voting beyond straight lines, evidenced concretely by the $1{,}024\times$ vs.\ $1.6\times$ memory scaling gap between dense and factorized accumulators from $d=3$ to $d=5$ (Table~\ref{tab:memory_scaling}), rather than as claiming state-of-the-art curve detection. The central contribution is the factorized voting formulation itself, which lets an end-to-end feature-space Hough transform's computational cost scale with conditional parameter subspaces instead of the full parameter dimensionality. We hope this provides a foundation for future learned voting architectures and higher-dimensional geometric hypothesis spaces.
-
-\bibliographystyle{unsrtnat}
+\bibliographystyle{plainnat}
 \begin{thebibliography}{99}
 \bibitem[Hough(1962)]{hough1962} P.~V.~C. Hough. Method and means for recognizing complex patterns. US Patent 3,069,654, 1962.
-\bibitem[Duda and Hart(1972)]{duda1972} R.~O. Duda and P.~E. Hart. Use of the Hough transformation to detect lines and curves in pictures. \emph{Communications of the ACM}, 15(1):11--15, 1972.
+\bibitem[Duda and Hart(1972)]{duda1972} R.~O. Duda and P.~E. Hart. Use of the Hough transformation to detect lines and curves in pictures. \emph{Commun. ACM}, 15(1):11--15, 1972.
 \bibitem[Ballard(1981)]{ballard1981} D.~H. Ballard. Generalizing the Hough transform to detect arbitrary shapes. \emph{Pattern Recognition}, 13(2):111--122, 1981.
-\bibitem[Yuen et~al.(1989)]{yuen1989ellipse} H.~K. Yuen, J.~Illingworth, and J.~Kittler. Detecting partially occluded ellipses using the Hough transform. \emph{Image and Vision Computing}, 7(1):31--37, 1989.
-\bibitem[Xu et~al.(1990)]{xu1990rht} L.~Xu, E.~Oja, and P.~Kultanen. A new curve detection method: randomized Hough transform. \emph{Pattern Recognition Letters}, 11(5):331--338, 1990.
+\bibitem[Yuen et~al.(1989)]{yuen1989ellipse} H.~K. Yuen, J.~Illingworth, and J.~Kittler. Detecting partially occluded ellipses using the Hough transform. \emph{Image Vis. Comput.}, 7(1):31--37, 1989.
+\bibitem[Xu et~al.(1990)]{xu1990rht} L.~Xu, E.~Oja, and P.~Kultanen. A new curve detection method: randomized Hough transform. \emph{Pattern Recognit. Lett.}, 11(5):331--338, 1990.
 \bibitem[Kiryati et~al.(1991)]{kiryati1991} N.~Kiryati, Y.~Eldar, and A.~M. Bruckstein. A probabilistic Hough transform. \emph{Pattern Recognition}, 24(4):303--316, 1991.
 \bibitem[Illingworth and Kittler(1987)]{illingworth1987} J.~Illingworth and J.~Kittler. The adaptive Hough transform. \emph{IEEE TPAMI}, 9(5):690--698, 1987.
-\bibitem[Torrente and Beltrametti(2014)]{torrente2014} M.-L. Torrente and M.~C. Beltrametti. Almost-vanishing polynomials and an application to the Hough transform. \emph{Journal of Algebra and its Applications}, 13(8):1450057, 2014.
-\bibitem[Massone et~al.(2015)]{massone2015} A.~M. Massone, A.~Perasso, C.~Campi, and M.~C. Beltrametti. Profile detection in medical and astronomical images by means of the Hough transform of special classes of curves. \emph{Journal of Mathematical Imaging and Vision}, 51(2):296--310, 2015.
+\bibitem[Torrente and Beltrametti(2014)]{torrente2014} M.-L. Torrente and M.~C. Beltrametti. Almost-vanishing polynomials and an application to the Hough transform. \emph{J. Algebra Appl.}, 13(8):1450057, 2014.
+\bibitem[Massone et~al.(2015)]{massone2015} A.~M. Massone, A.~Perasso, C.~Campi, and M.~C. Beltrametti. Profile detection in medical and astronomical images by means of the Hough transform of special classes of curves. \emph{J. Math. Imaging Vis.}, 51(2):296--310, 2015.
 \bibitem[Zhao et~al.(2021)]{zhao2021deep} K.~Zhao, Q.~Han, C.-B. Zhang, J.~Xu, and M.-M. Cheng. Deep Hough transform for semantic line detection. \emph{IEEE TPAMI}, 2021.
 \bibitem[Lin et~al.(2020)]{lin2020houghpriors} Y.~Lin, S.~L. Pintea, and J.~C. van Gemert. Deep Hough-transform line priors. In \emph{ECCV}, 2020.
-\bibitem[Zhang et~al.(2023)]{houglanenet2023} J.-Q. Zhang, H.-B. Duan, J.-L. Chen, A.~Shamir, and M.~Wang. HoughLaneNet: lane detection with deep Hough transform and dynamic convolution. \emph{Computers \& Graphics}, 2023. arXiv:2307.03494.
+\bibitem[Zhang et~al.(2023)]{houglanenet2023} J.-Q. Zhang, H.-B. Duan, J.-L. Chen, A.~Shamir, and M.~Wang. HoughLaneNet: lane detection with deep Hough transform and dynamic convolution. \emph{Comput. Graph.}, 2023.
 \bibitem[Qi et~al.(2019)]{qi2019votenet} C.~R. Qi, O.~Litany, K.~He, and L.~J. Guibas. Deep Hough voting for 3D object detection in point clouds. In \emph{ICCV}, 2019.
 \bibitem[Tabelini et~al.(2020)]{polylanenet2020} L.~Tabelini et~al. PolyLaneNet: lane estimation via deep polynomial regression. In \emph{ICPR}, 2020.
 \bibitem[Liu et~al.(2021)]{lstr2021} R.~Liu, Z.~Yuan, T.~Liu, and Z.~Xiong. End-to-end lane shape prediction with transformers. In \emph{WACV}, 2021.
 \bibitem[Feng et~al.(2022)]{feng2022bezier} Z.~Feng, S.~Guo, X.~Tan, K.~Xu, M.~Wang, and L.~Ma. Rethinking efficient lane detection via curve modeling. In \emph{CVPR}, 2022.
 \bibitem[Chen et~al.(2023)]{bsnet2023} H.~Chen, M.~Wang, and Y.~Liu. BSNet: lane detection via draw B-spline curves nearby. \emph{arXiv:2301.06910}, 2023.
-\bibitem[Fischler and Bolles(1981)]{ransac1981} M.~A. Fischler and R.~C. Bolles. Random sample consensus. \emph{Communications of the ACM}, 24(6):381--395, 1981.
+\bibitem[Fischler and Bolles(1981)]{fischler1981ransac} M.~A. Fischler and R.~C. Bolles. Random sample consensus. \emph{Commun. ACM}, 24(6):381--395, 1981.
+\bibitem[Fitzgibbon et~al.(1999)]{fitzgibbon1999ellipse} A.~Fitzgibbon, M.~Pilu, and R.~B. Fisher. Direct least square fitting of ellipses. \emph{IEEE TPAMI}, 21(5):476--480, 1999.
+\bibitem[Hartley and Zisserman(2004)]{hartley2004mvg} R.~Hartley and A.~Zisserman. \emph{Multiple View Geometry in Computer Vision}, 2nd ed. Cambridge University Press, 2004.
 \bibitem[Carion et~al.(2020)]{detr2020} N.~Carion et~al. End-to-end object detection with transformers. In \emph{ECCV}, 2020.
+\bibitem[TuSimple(2017)]{tusimple2017} TuSimple. TuSimple lane detection benchmark. \url{https://github.com/TuSimple/tusimple-benchmark}, 2017.
 \end{thebibliography}
 
 \end{document}

@@ -6,6 +6,64 @@ Every figure in every table comes from one of the commands below, run from
 hardware nondeterminism. Thresholds in the paper are the best-F entries of
 each printed sweep.
 
+## Evaluation protocol v24 (supersedes the threshold rule above)
+The numbers in the first submission picked each detection threshold by
+sweeping on the test set and reporting the best F. That is test-set tuning
+and makes the F-scores optimistic. From v24 on:
+  * the threshold is selected on a held-out validation set (dataset seed
+    3 + 10*seed), and the test set (seed 2 + 10*seed) is scored once at that
+    threshold, for our model (train.py) and for the learned baselines
+    (eval_baselines.py). Rule-based baselines have no score threshold, so
+    they are unchanged.
+  * every run also prints "test-sweep oracle", the old best-of-sweep number,
+    and its gap to the validation-selected number, so the optimism of the old
+    protocol is measured, not assumed.
+  * all tables must be regenerated; the old values are not comparable.
+  * use several seeds (--seed 0 1 2 ...); with 200 test images, single-run
+    differences of a few F points are within noise.
+
+    # one run, machine-readable (paper setting)
+    python train.py --family parabola --size 64 --epochs 10 --n-train 1000 \
+        --n-val 200 --n-test 200 --save parabola_hard.pt --json-out parabola_hard.json
+    # same protocol for the learned baselines
+    python eval_baselines.py --model regression --family parabola --epochs 10 \
+        --n-train 1000 --n-val 200 --n-test 200 --json-out reg.json
+    python eval_baselines.py --model query --family parabola --epochs 10 \
+        --n-train 1000 --n-val 200 --n-test 200 --json-out query.json
+
+    # rule-based baselines get the same treatment: a minimum detection score
+    # (RANSAC inlier count, Hough accumulator value) selected on validation.
+    # Without --tune-score they always keep their top-4 candidates, which caps
+    # precision and is not comparable with a thresholded model.
+    python eval_baselines.py --model ransac --family parabola --n-val 200 \
+        --n-test 200 --tune-score --json-out ransac_tuned.json
+    python eval_baselines.py --model classical --family parabola --n-val 200 \
+        --n-test 200 --tune-score --json-out classical_tuned.json
+    python eval_baselines.py --model ransac --family ellipse --n-val 200 \
+        --n-test 200 --tune-score --json-out ransac_ellipse_tuned.json
+
+### Ablations (Reviewer 1 and 2 requests)
+    python ablate.py --suite pool probes topk noise occlusion \
+        --family parabola --size 64 --epochs 10 --n-train 1000 \
+        --n-val 200 --n-test 200 --seeds 0 1 2 --out ablations_parabola
+Writes ablations_parabola.json and .md (mean and std over seeds). Results are
+saved after every finished run; rerun with --resume to continue after a crash
+and --values to restrict the grid (e.g. --suite noise --values 0.0 0.16 0.24).
+Choose a configuration by validation F (the val F column), never by test F. The topk
+suite re-evaluates one trained model per seed at k = 1, 2, 4, 8, so it costs
+no extra training. Cost: 17 trained models per seed for the other suites.
+
+### Stage-1 anchor recall and anchor separation
+    python anchor_eval.py --family parabola --size 64 --load parabola_hard.pt \
+        --thresh-from parabola_hard.json --json-out anchors_parabola.json
+Top-k anchor recall (one-to-one, tolerance in anchor bins) measures how
+precisely Stage 1 localizes anchors; it is not a bound on end-to-end recall,
+because F/R average over lenient curve-similarity thresholds. The script also
+prints an oracle-anchor ceiling: Stage 2 run at the ground-truth anchors,
+compared with the real pipeline. That difference is the cost of Stage 1. The separation sweep uses two curves
+whose anchors are 0 to 24 px apart; use a model trained on the multi-curve
+(hard) setting, since a single-curve model is out of distribution there.
+
 ## Table 1 (accumulator memory, d=3) and Table 2 (memory scaling d=3 vs d=5)
     python measure_memory.py
 No training. Prints both tables' numbers, including the arithmetic

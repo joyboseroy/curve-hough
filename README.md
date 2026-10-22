@@ -5,12 +5,10 @@ al., TPAMI 2021) from straight lines to parametric curve families via a
 cascade of low-dimensional, feature-space voting stages.
 
 ## Layout
-- paper/main.tex : full paper (abstract, method, propositions,
-  attention-comparison table, pseudocode, synthetic results for all four
-  families incl. line, real-data validation section). Two versions
-  maintained: an anonymized two-column version and a non-anonymous
-  single-column version (full un-trimmed prose, no page limit) for
-  arXiv/Zenodo/personal site.
+- paper/main.tex : current paper (single column; `\anontrue` gives a
+  double-blind copy). Describes the v24 protocol and results, see
+  RESULTS_v24.md. paper/main_v1_old.tex is the earlier version. Open work
+  is listed in paper/NOTES_TODO.md.
 - code/dataset.py : synthetic benchmark (parabola, circle, ellipse, line;
   noise, occlusion, distractor segments). Params tensor always width 5
   (x0, y0, shape...), padded with zeros for lower-dimensional families.
@@ -23,11 +21,15 @@ cascade of low-dimensional, feature-space voting stages.
   All families store params uniformly as (x0, y0, shape...); no per-family
   coordinate special-casing anywhere (see v23's bug writeup for why this
   matters).
+- code/anchor_eval.py : Stage-1 diagnostics (top-k anchor recall, anchor
+  separation sweep); see REPRODUCE.md
+- code/ablate.py : ablation runner (pool, probes, topk, noise, occlusion)
+  with multi-seed mean and std; see REPRODUCE.md
 - code/metrics.py : curve-EA score (parabola/circle/ellipse/line) and
   Hungarian-matched P/R/F evaluation
 - code/baselines.py : classical dense Hough on edges, RANSAC, direct
-  regression head, DETR-lite hypothesis-query head -- parabola/circle only;
-  ellipse baselines not yet implemented (see Remaining work)
+  regression head, DETR-lite hypothesis-query head; RANSAC supports
+  parabola, circle and ellipse (5-point conic fit)
 - code/train.py : synthetic training and evaluation entry point
   (--family parabola | circle | ellipse | line); --save/--load/--sweep/
   --diag/--topk
@@ -201,14 +203,12 @@ Real results (held-out TuSimple split, letterboxed to 128px):
   scale, ~1,500-1,800 real training images after filtering -- not yet
   resolved with repeated runs).
 - RANSAC line baseline, same edge detection, same held-out split:
-  F=0.253 -- our line model beats it by roughly 2x.
+  F=0.253 (untuned: fixed number of candidates; a tuned baseline has not
+  been run, so the ratio probably overstates the advantage).
 
-This reproduces the paper's central synthetic finding on real
-photographs: the structurally simpler family (line, no Stage 2)
-transfers far more successfully than the family requiring conditional
-shape refinement (lane/parabola) -- the same dimensionality-robustness
-ordering visible in the synthetic corrupted-setting results, now with
-real evidence outside procedurally generated data.
+Note (v24): these real-data runs predate the validation-threshold
+protocol and the "dimensionality-robustness ordering" argument made
+here originally is no longer claimed in the paper. See RESULTS_v24.md.
 
 ### v24: paper finalized with real-data section
 Added a full Real-World Validation section (the v23 findings above),
@@ -269,6 +269,45 @@ arXiv/Zenodo/personal site.
     ellipse have no real-data equivalent yet (no obvious real dataset
     as directly available as TuSimple is for lane-like curves).
 
+### v24: evaluation protocol fix, ablation and anchor diagnostics
+Response to review feedback. Changes:
+- train.py and eval_baselines.py now select the detection threshold on a
+  held-out validation set and score the test set once. The old best-of-sweep
+  test number is still printed as "test-sweep oracle" for comparison. All
+  previously reported F-scores used the old protocol and must be regenerated.
+- train.py exposes --pool, --probe-shapes, --ellipse-probe-per-axis,
+  --noise, --occ-max, --seed, --n-val and --json-out; FactorizedDHT takes a
+  pool argument ('logsumexp' default, 'mean', 'max').
+- New: anchor_eval.py (top-k Stage-1 anchor recall, separation sweep) and
+  ablate.py. dataset.py gains SeparationCurves and an occ_max option; the
+  default generator is bit-identical to before (checked).
+- Fixed a bug present at the previous head: eval_baselines.py crashed for the
+  learned baselines because ground-truth params are zero-padded to width 5
+  since ellipse support (v12) while the parabola/circle heads predict width
+  3. hungarian_param_loss now keeps only the family's real columns.
+- Ellipse baselines added: ransac_ellipse (minimal 5-point conic solver,
+  Sampson inlier distance, inlier refit, 3000 iterations) and ellipse
+  support in the learned regression and DETR-lite baselines. Dense classical
+  Hough is deliberately not run for ellipse (dense 5-D accumulator is the
+  intractable case). Checked: the conic solver recovers 200 random ellipses
+  exactly. RANSAC on 200 test images (64px, seed 2, no training): corrupted
+  F 0.383 (P 0.366 R 0.401), clean F 0.708 (P 0.570 R 0.935). RANSAC always
+  emits 3 candidates and has no score threshold, so clean precision is
+  limited by that, not tuned.
+- eval_baselines.py --tune-score gives RANSAC and classical Hough the same
+  validation-selected score threshold the learned models get. Measured on
+  200 test images: RANSAC parabola F 0.551 (untuned) -> 0.702 (tuned),
+  ellipse 0.383 -> 0.410. The untuned numbers in the first submission
+  understated these baselines relative to a thresholded model.
+- ablate.py saves after every run, supports --resume and --values.
+- First full runs (parabola, 64px, seed 0): factorized DHT F 0.519 with
+  logsumexp pooling, 0.578 mean, 0.705 max (single seed, test F; confirm on
+  more seeds and select by validation F before adopting a default).
+- Numbers from the full runs, with commands and output file names, are in
+  RESULTS_v24.md.
+- Not yet done: a real dense d=4 end-to-end comparison, multi-seed TuSimple
+  with published baselines, coarse-to-fine re-voting.
+
 ## Design decisions already made
 - Method core is geometric factorized voting, not learned queries. The
   transformer angle appears as (a) the discussion section: Hough voting =
@@ -277,9 +316,9 @@ arXiv/Zenodo/personal site.
   future work, deliberately.
 - Metric mirrors the DHT paper's EA score (contribution symmetry with the
   paper being generalized), generalized to arbitrary shape dimensionality.
-- Paper's empirical framing is "geometric structure vs. free-form
-  prediction," not "we beat RANSAC" -- supported by real baseline numbers,
-  see main.tex Table 3 and its discussion.
+- Paper's empirical framing (v24): the cascade ties a tuned RANSAC fit at
+  d=3 and is slightly behind at d=5; the contribution is differentiable
+  feature-space voting with low accumulator memory, not higher accuracy.
 - A curve family with no natural anchor separate from its own parameters
   (line: theta, r) is handled as a degenerate case of the same cascade
   (Stage 2 skipped), not a separate model -- keeps lines and curves in one
