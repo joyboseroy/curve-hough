@@ -119,3 +119,18 @@ regression (thresh 0.80) and query (thresh 0.60).
 - Numbers not yet in the paper (and so not reproducible from it): circle
   clean control, circle/ellipse baselines, ablations, 128x128 runs. These
   are listed as remaining work in the README, not reported anywhere.
+
+## TuSimple under the v24 protocol
+
+Frames are split 80/10/10 train/val/test with a seeded shuffle (`code/real_data/split.py`).
+The threshold (model) or minimum inlier count (RANSAC) is selected on the validation
+frames and the test frames are scored once. Lane models use max pooling.
+
+    cd code
+    python run_real_suite.py --root /path/to/TUSimple/train_set \
+        --out real_runs --seeds 0 1 2 --epochs 8 --lane-lse
+
+writes one json per run and prints a summary table (mean +/- std over seeds) for the
+learned line and lane models and for tuned and untuned RANSAC. Single runs:
+`train_real.py --seed S --json-out f.json` and `real_data/ransac_real_baseline.py --seed S --json-out f.json`.
+`real_data/ransac_line_baseline.py` is the older untuned, test-only version.

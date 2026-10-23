@@ -1,6 +1,7 @@
 """RANSAC line-fit baseline on real TuSimple images, for the 'line' family.
 
-Runs on the EXACT same held-out test split train_real.py used (same seed=0
+NOTE: superseded by ransac_real_baseline.py (validation-tuned, shared split,
+line and lane). Kept for reference. Runs on the EXACT same held-out test split train_real.py used (same seed=0
 shuffle over the same RealTuSimpleDataset construction), so the comparison
 against the trained model's F/similarity numbers is apples-to-apples --
 not a different subset that happens to look favorable either way.

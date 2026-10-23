@@ -6,10 +6,17 @@ Usage:
     python train_real.py --root /content/tusimple/TUSimple/train_set \
         --family line --epochs 8 --save line_real.pt --sweep
 
-Splits the loaded items 90/10 train/test (no official held-out TuSimple
-test labels are used here -- see REAL_DATA_PLAN.md on test_label.json).
+Splits the loaded frames 80/10/10 train/val/test with a seeded shuffle (see
+real_data/split.py). The detection threshold is selected on the validation
+frames and the test frames are scored once, the same protocol as train.py.
+No official held-out TuSimple test labels are used.
+
+Per-seed run with results saved:
+    python train_real.py --root ... --family lane --pool max --seed 1 \
+        --epochs 8 --json-out lane_seed1.json
 """
 import argparse
+import json
 import sys
 import os
 import numpy as np
@@ -19,8 +26,9 @@ from torch.utils.data import DataLoader
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "real_data"))
 from hough import FactorizedDHT, stage1_loss
-from metrics import prf
 from real_data.tusimple_dataset import RealTuSimpleDataset
+from real_data.split import split_indices
+import train as T
 
 
 def collate(batch):
@@ -44,7 +52,15 @@ def main():
     ap.add_argument("--load", default="")
     ap.add_argument("--resume", default="")
     ap.add_argument("--sweep", action="store_true")
-    ap.add_argument("--thresh", type=float, default=0.25)
+    ap.add_argument("--thresh", type=float, default=None,
+                    help="fixed score threshold; default: select on the validation frames")
+    ap.add_argument("--seed", type=int, default=0,
+                    help="seeds the split, initialization and data order")
+    ap.add_argument("--pool", default="max", choices=["logsumexp", "mean", "max"],
+                    help="Stage-1 pooling over probe shapes (lane only; the "
+                         "synthetic results use max)")
+    ap.add_argument("--probe-shapes", type=int, default=6)
+    ap.add_argument("--json-out", default="")
     ap.add_argument("--diag", action="store_true",
                     help="print matched curve-EA similarity distribution")
     ap.add_argument("--vertex-margin", type=float, default=0.5,
@@ -55,7 +71,8 @@ def main():
     args = ap.parse_args()
 
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    torch.manual_seed(0)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     is_line = (args.family == "line")
 
     full = RealTuSimpleDataset(args.root, args.family, size=args.size,
@@ -63,22 +80,20 @@ def main():
                                vertex_margin=args.vertex_margin)
     n = len(full)
     print(f"loaded {n} real frames with >=1 '{args.family}' lane")
-    n_test = max(1, n // 10)
-    idx = list(range(n))
-    rng = np.random.default_rng(0)
-    rng.shuffle(idx)
-    test_idx, train_idx = idx[:n_test], idx[n_test:]
+    train_idx, val_idx, test_idx = split_indices(n, args.seed)
     train = torch.utils.data.Subset(full, train_idx)
+    val = torch.utils.data.Subset(full, val_idx)
     test = torch.utils.data.Subset(full, test_idx)
-    print(f"train {len(train)} / test {len(test)}")
+    print(f"train {len(train)} / val {len(val)} / test {len(test)}")
     tl = DataLoader(train, batch_size=args.bs, shuffle=True, collate_fn=collate)
 
-    model_kwargs = dict(topk=4)
+    model_kwargs = dict(topk=4, pool=args.pool)
     if is_line:
         model_kwargs["theta_bins"] = 60
         model_kwargs["r_bins"] = 60
     else:
         model_kwargs["anchor_bins"] = 32
+        model_kwargs["probe_shapes"] = args.probe_shapes
         # The default shape range (0.004, 0.06) was tuned on the synthetic
         # benchmark and doesn't necessarily cover real curvature -- 24.4% of
         # real TuSimple lane 'a' values fell outside it in an earlier check.
@@ -135,34 +150,13 @@ def main():
                 print(f"  checkpoint saved to {args.save}")
 
     model.eval()
-    gts_by_img = []
-    for i in range(len(test)):
-        _, params, k = test[i]
-        gts_by_img.append([params[j].numpy() for j in range(k)])
-
-    def run_eval(thresh):
-        dets_all = []
-        for i in range(len(test)):
-            img, _, _ = test[i]
-            dets_all.append(model.detect(img[None].to(dev), thresh=thresh)[0])
-        n_det = sum(len(d) for d in dets_all)
-        n_gt = sum(len(g) for g in gts_by_img)
-        (p, r, f), sims = prf(dets_all, gts_by_img, args.family, args.size,
-                              return_sims=True)
-        print(f"thresh {thresh:.2f}: detections {n_det} vs gt {n_gt}  "
-              f"P {p:.3f} R {r:.3f} F {f:.3f}")
-        if args.diag and len(sims):
-            q = np.percentile(sims, [10, 25, 50, 75, 90])
-            print(f"  matched curve-EA similarity: mean {sims.mean():.3f}  "
-                  f"p10/p25/p50/p75/p90 = {q[0]:.2f}/{q[1]:.2f}/{q[2]:.2f}/"
-                  f"{q[3]:.2f}/{q[4]:.2f}  (n={len(sims)})")
-        return f
-
-    if args.sweep:
-        for t in [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75]:
-            run_eval(t)
-    else:
-        run_eval(args.thresh)
+    result = T.evaluate(model, args, val, test, dev)
+    result["split"] = dict(n_train=len(train), n_val=len(val), n_test=len(test),
+                           seed=args.seed)
+    if args.json_out:
+        with open(args.json_out, "w") as f:
+            json.dump(result, f, indent=1, default=float)
+        print(f"results written to {args.json_out}")
 
 
 if __name__ == "__main__":

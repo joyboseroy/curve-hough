@@ -29,7 +29,7 @@
 \begin{abstract}
 We extend the Deep Hough Transform (DHT), which detects semantic lines by aggregating learned features along candidate lines into a two-dimensional parameter space, to higher-dimensional parametric curve families. The extension is hard because the accumulator for a family with $d$ parameters has $O(B^{d})$ cells for $B$ bins per axis. We propose a factorized deep Hough transform, a differentiable feature-space voting cascade that splits the parameter vector into a spatial anchor and a shape. A coarse two-dimensional accumulator votes for anchors, and a dense shape accumulator is built only around the top-$k$ anchors, so memory falls from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$. Lines are the degenerate case with no second stage. We also define a curve agreement score that extends the EA line similarity to parametric curves, and a synthetic benchmark of parabolas, circles and ellipses with noise, occlusion and distractors.
 
-We evaluate with thresholds selected on a validation split and the test split scored once, and we give the geometric baselines the same treatment. Under this protocol the choice of Stage-1 pooling over probe shapes matters a great deal: max pooling raises parabola F from $0.51$ to $0.70$ over log-sum-exp (3 seeds). With it, the cascade ties a tuned RANSAC fit on parabolas ($0.706$ vs.\ $0.702$) and circles ($0.743$ vs.\ $0.742$) and is slightly behind it on ellipses ($0.382$ vs.\ $0.410$), while direct regression and query-based heads reach $0.15$ and $0.13$ on parabolas. So the cascade is competitive with classical fitting rather than better than it, and its practical advantage is memory: at $B=32$ a dense $d=5$ accumulator would need about 4\,GB (computed, not instantiated) against a measured 236\,KB for the cascade. We locate the remaining error in Stage 1. Running Stage 2 at the ground-truth anchors gives F $=0.938$ against $0.706$, and curves whose anchors lie within about 8 pixels of each other lose about 0.2 F because their Stage-1 peaks merge. We also report a TuSimple lane-detection stress test, which we treat as a feasibility check rather than a competitive result. Code and the benchmark generator are released.
+We evaluate with thresholds selected on a validation split and the test split scored once, and we give the geometric baselines the same treatment. Under this protocol the choice of Stage-1 pooling over probe shapes matters a great deal: max pooling raises parabola F from $0.51$ to $0.70$ over log-sum-exp (3 seeds). With it, and over three seeds, the cascade at the pre-specified six probe shapes scores $0.696\pm0.011$ on parabolas against $0.725\pm0.016$ for a tuned RANSAC fit, and at the validation-selected twelve probe shapes it scores $0.753\pm0.013$. On circles and ellipses (one seed, six probes) it ties and trails the tuned RANSAC fit ($0.743$ vs.\ $0.742$, $0.382$ vs.\ $0.410$). Direct regression and query-based heads reach $0.15$ and $0.13$ on parabolas. So the cascade is competitive with classical fitting and modestly ahead of it only with the larger probe set, and its practical advantage is memory: at $B=32$ a dense $d=5$ accumulator would need about 4\,GB (computed, not instantiated) against a measured 236\,KB for the cascade. We locate the remaining error in Stage 1. Running Stage 2 at the ground-truth anchors gives F $=0.938$ against $0.706$ and curves whose anchors lie within about 8 pixels of each other lose about 0.2 F because their Stage-1 peaks merge. Stage 1 is also sensitive to probe coverage: the number of probe shapes chosen on validation (12) lifts parabola F from $0.696$ to $0.753$ over three seeds, with anchor recall rising from $0.77$ to $0.84$. We also report a TuSimple lane-detection stress test, which we treat as a feasibility check rather than a competitive result. Code and the benchmark generator are released.
 \end{abstract}
 
 \section{Introduction}
@@ -49,7 +49,7 @@ The contributions are as follows.
   \item \textbf{Method.} A factorized deep Hough transform for curve families with a spatial anchor, with lines as the degenerate case (Section~\ref{sec:method}), and a curve-EA similarity that extends the EA line score (Section~\ref{sec:metric}).
   \item \textbf{Protocol.} A benchmark generator and an evaluation protocol with validation-selected thresholds, matched baselines that include tuned RANSAC for parabolas, circles and ellipses, and ablations (Sections~\ref{sec:protocol} and~\ref{sec:results}).
   \item \textbf{Diagnosis.} A decomposition of the cascade's error into Stage 1 and Stage 2 using an oracle-anchor ceiling, top-$k$ anchor recall and an anchor-separation sweep (Section~\ref{sec:stage1}). Stage 1 is the bottleneck, and nearby anchors are a quantified failure region.
-  \item \textbf{Scope of the claim.} At $d=3$ the cascade matches a tuned RANSAC fit and at $d=5$ it is somewhat behind. What it adds is differentiable feature-space voting with memory that grows with the shape dimension only (Section~\ref{sec:memory}). We do not claim better accuracy than classical fitting.
+  \item \textbf{Scope of the claim.} On parabolas the cascade is about 0.03 below a tuned RANSAC fit at six probe shapes and about 0.03 above it at twelve (three seeds), and at $d=5$ it is somewhat behind (one seed). What it adds is differentiable feature-space voting with memory that grows with the shape dimension only (Section~\ref{sec:memory}). We do not claim a clear accuracy advantage over classical fitting.
   \item \textbf{Real-image stress test.} A TuSimple evaluation with a structural split into near-straight and curved lanes (Section~\ref{sec:real}), reported with its limitations.
 \end{itemize}
 
@@ -166,18 +166,19 @@ The two learned baselines get the same 1{,}000 training images and 10 epochs as 
 \label{sec:results}
 
 \subsection{Comparison with baselines}
-Table~\ref{tab:main} gives F on the corrupted benchmark for seed 0. All methods see the same 200 test images.
+Table~\ref{tab:main} gives F on the corrupted benchmark for seed 0, with the default of 6 probe shapes for the cascade (see Section~\ref{sec:probes}). All methods see the same 200 test images.
 
 \begin{table}[t]
 \centering
-\caption{F on the corrupted benchmark, $64\times64$, seed 0, thresholds selected on validation. ``n.r.'' means not run. Differences below about 0.02 are within test noise. Over three seeds the parabola cascade with max pooling scores $0.696\pm0.011$ (Table~\ref{tab:pool}).}
+\caption{F on the corrupted benchmark, $64\times64$, seed 0, thresholds selected on validation. ``n.r.'' means not run. Differences below about 0.02 are within test noise. Over three seeds the parabola cascade with max pooling scores $0.696\pm0.011$ at $m=6$ and $0.753\pm0.013$ at $m=12$ (Table~\ref{tab:seeds}).}
 \label{tab:main}
 \small
 \begin{tabular}{lccc}
 \toprule
 \textbf{Method} & \textbf{Parabola ($d=3$)} & \textbf{Circle ($d=3$)} & \textbf{Ellipse ($d=5$)} \\
 \midrule
-Factorized DHT, max pool (ours)  & 0.706 & 0.743 & 0.382 \\
+Factorized DHT, max pool, $m=6$ (ours) & 0.706 & 0.743 & 0.382 \\
+Factorized DHT, max pool, $m=12$ (ours) & 0.771 & n.r. & n.r. \\
 Factorized DHT, log-sumexp       & 0.519 & n.r. & 0.319 \\
 RANSAC, tuned                    & 0.702 & 0.742 & 0.410 \\
 RANSAC, untuned (top 4)          & 0.551 & 0.584 & 0.383 \\
@@ -188,7 +189,26 @@ DETR-lite queries                & 0.131 & n.r. & n.r. \\
 \end{tabular}
 \end{table}
 
-Three observations follow. First, the cascade with max pooling ties a tuned RANSAC fit at $d=3$ on both parabolas and circles. On ellipses it is 0.03 behind. We read the ellipse gap as real but small, since it sits near the test-noise level and we have one seed. Second, tuning matters for the baselines as much as for the cascade. Untuned RANSAC loses about 0.15 F on parabolas and circles because it always emits four candidates. Third, the regression and query heads score 0.15 and 0.13 on parabolas, about a fifth of the geometric methods. We have not run them on circles and ellipses. We suspect the gap reflects the difficulty of predicting exact parameters from pooled features when several curves, occlusion and distractors share the image, but a small training budget also contributes, and this experiment does not separate the two.
+Table~\ref{tab:seeds} repeats the parabola comparison over three seeds. The baselines are rerun for each seed, so the two sides see the same test images.
+
+\begin{table}[t]
+\centering
+\caption{Parabola F over three seeds (mean $\pm$ standard deviation of test F, thresholds selected on validation). $m=6$ was fixed before the probe study. $m=12$ is the smallest probe count with the highest validation F, a rule recorded before the three-seed run. Per-seed test F in parentheses.}
+\label{tab:seeds}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Method} & \textbf{test F} & \textbf{per seed} \\
+\midrule
+Factorized DHT, $m=6$   & $0.696\pm0.011$ & \\
+Factorized DHT, $m=12$  & $0.753\pm0.013$ & 0.771, 0.750, 0.739 \\
+RANSAC, tuned           & $0.725\pm0.016$ & 0.702, 0.740, 0.732 \\
+RANSAC, untuned (top 4) & $0.566\pm0.011$ & 0.551, 0.577, 0.571 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three observations follow. First, the seed-0 numbers show the cascade with six probes level with a tuned RANSAC fit on parabolas and circles, and 0.03 behind on ellipses. Over three seeds (Table~\ref{tab:seeds}) the parabola picture is less favorable at six probes: $0.696\pm0.011$ against $0.725\pm0.016$, so seed 0 flattered the cascade. At the validation-selected twelve probes the cascade reaches $0.753\pm0.013$, ahead of RANSAC on all three seeds by $+0.069$, $+0.010$ and $+0.007$. The last two margins are within about two seed standard deviations, so we describe the advantage as modest. Circles and ellipses remain one seed for the cascade at six probes, and the ellipse gap sits near the test-noise level. Tuned RANSAC on circles scores $0.742$, $0.727$ and $0.726$ over three seeds ($0.732\pm0.009$), so the cascade's seed-0 value of $0.743$ is not evidence of a lead there either. Second, tuning matters for the baselines as much as for the cascade. Untuned RANSAC loses about 0.15 F on parabolas and circles because it always emits four candidates. Third, the regression and query heads score 0.15 and 0.13 on parabolas, about a fifth of the geometric methods. We have not run them on circles and ellipses. We suspect the gap reflects the difficulty of predicting exact parameters from pooled features when several curves, occlusion and distractors share the image, but a small training budget also contributes, and this experiment does not separate the two.
 
 \subsection{Stage-1 pooling}
 \label{sec:pooling}
@@ -261,7 +281,7 @@ F               & 0.584 & 0.588 & 0.584 & 0.582 & 0.640 & 0.746 & 0.779 & 0.809 
 
 \subsection{Number of retained anchors}
 \label{sec:ablations}
-Table~\ref{tab:ablate} varies the number $k$ of Stage-1 peaks passed to Stage 2 for parabolas with max pooling and seed 0. One trained model is evaluated at all four values of $k$, so the rows differ only in how many anchors Stage 2 sees. Probe-set size, noise level, occlusion level and mean pooling were not evaluated (Section~\ref{sec:limitations}).
+Table~\ref{tab:ablate} varies the number $k$ of Stage-1 peaks passed to Stage 2 for parabolas with max pooling and seed 0. One trained model is evaluated at all four values of $k$, so the rows differ only in how many anchors Stage 2 sees. Probe-set size is varied in Section~\ref{sec:probes}, and mean pooling was not evaluated (Section~\ref{sec:limitations}).
 
 \begin{table}[t]
 \centering
@@ -283,6 +303,56 @@ $k$ & \textbf{val F} & \textbf{test F} & \textbf{P} & \textbf{R} & \textbf{ancho
 Going from $k=1$ to $k=2$ adds 0.12 F and going to $k=4$ adds a further 0.006, which is within noise, and $k=8$ adds nothing. Anchor recall keeps rising slightly (0.786 to 0.804) while F does not. With one anchor, recall is low because images hold up to three curves. Beyond two anchors the extra candidates are mostly duplicates or near-misses of curves already found, and they lower precision as much as they raise recall. This agrees with the diagnosis above: more retained peaks do not repair a mislocalized or merged anchor, so the fix has to be in Stage 1 itself and not in $k$.
 
 Two runs of the same configuration and seed gave 0.706 (Table~\ref{tab:main}) and 0.690 here, a spread of 0.016 that we have not traced, probably nondeterministic GPU kernels. We therefore treat single-run differences below about 0.02 as noise throughout.
+
+\subsection{Number of probe shapes}
+\label{sec:probes}
+Stage 1 pools over $m$ probe shapes. Table~\ref{tab:probes} varies $m$ for parabolas, one trained model per value on seed 0, and Table~\ref{tab:seeds} repeats the selected value over three seeds. Its compute grows linearly with $m$ because the probes are accumulated one at a time. Accumulator memory does not grow, since the pool is a running maximum.
+
+\begin{table}[t]
+\centering
+\caption{Probe-set size $m$, parabola, corrupted benchmark, max pooling, seed 0, one model per row, thresholds selected on validation. $m=6$ is the main setting. Two runs of it gave test F 0.690 and 0.706. The other columns for that row come from the 0.690 run (the model of Table~\ref{tab:ablate}). Anchor recall is at $k=4$ with a tolerance of one bin.}
+\label{tab:probes}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+$m$ & \textbf{val F} & \textbf{test F} & \textbf{P} & \textbf{R} & \textbf{anchor recall} & \textbf{threshold} \\
+\midrule
+4  & 0.648 & 0.667 & 0.662 & 0.672 & 0.719 & 0.70 \\
+6  & 0.674 & 0.690 & 0.666 & 0.717 & 0.786 & 0.55 \\
+8  & 0.701 & 0.695 & 0.726 & 0.666 & 0.788 & 0.65 \\
+12 & 0.767 & 0.771 & 0.755 & 0.788 & 0.855 & 0.55 \\
+16 & 0.767 & 0.783 & 0.775 & 0.791 & 0.867 & 0.55 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Probe-set size is the one factor so far that moves F by more than the noise level. Going from $m=6$ to $m=12$ adds about 0.08 F and 0.07 anchor recall on seed 0, and $m=16$ adds a little more. Validation F is equal for 12 and 16 (0.767), so validation does not separate them, and we take the smaller, cheaper value. Over three seeds, $m=12$ gives test F $0.753\pm0.013$ (validation F $0.755\pm0.020$, anchor recall $0.842\pm0.026$) against $0.696\pm0.011$ at $m=6$. This supports the diagnosis of Section~\ref{sec:stage1}: Stage 1 is the weak stage, and a denser set of probe shapes improves anchor recall and F together. The main setting $m=6$ was fixed before this ablation and is kept as the pre-specified default. The stronger setting costs twice the Stage-1 compute, and we have not repeated it for circles and ellipses.
+
+\subsection{Noise and occlusion}
+\label{sec:noise}
+Table~\ref{tab:noise} retrains the parabola cascade at five levels of additive Gaussian pixel noise and at four levels of occlusion, where occlusion is the maximum number of random occluding rectangles per image. Each model is trained and tested at its own level, and everything else is fixed at the main setting. F stays between 0.683 and 0.711 across all nine models. The spread is about the size of the 0.016 run-to-run variation noted above, so we see no effect of either corruption. Anchor recall is also flat, between 0.76 and 0.80, and the selected thresholds move only between 0.55 and 0.65.
+
+\begin{table}[t]
+\centering
+\caption{Noise level (top) and maximum number of occluding rectangles (bottom), parabola, max pooling, seed 0, one model per column, thresholds selected on validation. The $\sigma_n=0.08$ and 2-rectangle columns are the main setting (Table~\ref{tab:main}). Anchor recall is at $k=4$ with a tolerance of one bin.}
+\label{tab:noise}
+\small
+\begin{tabular}{llccccc}
+\toprule
+ & & \multicolumn{5}{c}{\textbf{value}} \\
+\midrule
+Noise $\sigma_n$ & & 0 & 0.04 & 0.08 & 0.16 & 0.24 \\
+ & test F & 0.683 & 0.700 & 0.706 & 0.696 & 0.700 \\
+ & anchor recall & 0.758 & 0.765 & 0.796 & 0.781 & 0.783 \\
+\addlinespace
+Occluders & & 0 & 1 & 2 & 4 & \\
+ & test F & 0.697 & 0.711 & 0.706 & 0.687 & \\
+ & anchor recall & 0.788 & 0.793 & 0.796 & 0.770 & \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+We read this as a statement about the benchmark and not as robustness in general. Pixel noise of this kind is easy for a convolutional encoder to average out, and up to four rectangles may not remove much of a curve. More to the point, F sits near 0.70 even with no added noise or with no occluders, where the remaining distractor segments and the overlap of up to three curves per image are still present. A plateau at that level is what the oracle ceiling and the separation sweep (Section~\ref{sec:stage1}) predict if anchor localization, not the corruption level, sets the limit. The data are consistent with that account, and the probe-set ablation of Section~\ref{sec:probes} points the same way, but we have not run a clean single-curve control at this resolution under the current protocol to test it directly. They also mean the corruption sweeps do not stress the method in the way the reviewers' question assumed. A stronger occlusion test, defined by the fraction of curve support removed, is still open.
 
 \subsection{Accumulator memory}
 \label{sec:memory}
@@ -365,14 +435,15 @@ This suggests a spectrum from fixed geometric attention, through geometric suppo
 \begin{itemize}
   \item \textbf{Family-conditional detection.} The target family is specified at inference time. This is deliberate and matches classical Hough voting, which also needs a parameterization of what it looks for, but it excludes open-world shape discovery and free-form curves. The factorization also needs a spatially meaningful anchor. A family-agnostic system could treat the family as another discrete hypothesis variable or learn a library of hypothesis spaces, which we do not attempt.
   \item \textbf{Stage 1 is the bottleneck.} The oracle ceiling of 0.938 against 0.706 shows that most of the remaining error is anchor localization. Anchors within about 8 px merge and cost about 0.2 F. Coarse-to-fine refinement and a multi-peak Stage 2 are the planned fixes and neither is implemented.
-  \item \textbf{No accuracy advantage over classical fitting.} The cascade ties tuned RANSAC at $d=3$ and is slightly behind at $d=5$. Its benefit is differentiable feature-space voting and low accumulator memory. We did not train or evaluate a dense accumulator at $d\ge4$, so the memory ratio is not an accuracy comparison.
-  \item \textbf{Seeds and coverage.} The baseline comparison in Table~\ref{tab:main} is one seed. Only the pooling ablation has three seeds. Circle and ellipse have no ablations, and the learned baselines were run for parabolas only. The ablations cover pooling and the number of retained anchors on parabolas only. Probe-set size, noise level, occlusion level and mean pooling were not evaluated.
+  \item \textbf{No accuracy advantage over classical fitting.} On parabolas the cascade is about 0.03 below tuned RANSAC at $m=6$ and about 0.03 above at $m=12$, and it is slightly behind at $d=5$. Its benefit is differentiable feature-space voting and low accumulator memory. We did not train or evaluate a dense accumulator at $d\ge4$, so the memory ratio is not an accuracy comparison.
+  \item \textbf{Seeds and coverage.} The parabola comparison has three seeds (Table~\ref{tab:seeds}), but the circle and ellipse rows of Table~\ref{tab:main} are one seed. The pooling ablation also has three seeds. Circle and ellipse have no ablations, and the learned baselines were run for parabolas only. The ablations cover pooling, the number of retained anchors, probe-set size, noise level and occlusion level on parabolas, one seed each except pooling. Mean pooling was not evaluated, and occlusion was varied by rectangle count rather than by the fraction of curve removed.
+  \item \textbf{Probe-set size beyond parabolas.} The value $m=12$ was selected on parabola validation F. Circles and ellipses have only been run at $m=6$, and the ellipse family, whose probe set is a grid of 27, may need a different count. A probe-count sweep for those families is open.
   \item \textbf{Scale and data.} All main results are at $64\times64$ with 1{,}000 training images and 10 epochs. The benchmark is synthetic, and trends at $128\times128$ are untested. The regression and query baselines are small and briefly trained, so their gap to the geometric methods is specific to this budget.
   \item \textbf{Real images.} The TuSimple results are single runs predate the validation-threshold protocol, use an untuned RANSAC baseline, and handle near-straight and curved lanes with two separate models. Published lane detectors are not evaluated.
 \end{itemize}
 
 \section{Conclusion}
-A deep Hough transform need not enumerate the full curve parameter space. If a curve family admits a spatial anchor, feature-space voting can be factorized into anchor localization followed by conditional shape voting, which reduces accumulator memory from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$ and makes DHT-style voting memory-feasible for families beyond lines. With max pooling over probe shapes, the cascade matches a tuned RANSAC fit on synthetic parabolas and circles, is slightly behind on ellipses, and needs 236\,KB of accumulator memory at $d=5$ where a dense accumulator would need about 4\,GB. Its remaining error sits in Stage 1: Stage 2 reaches F $=0.938$ at the ground-truth anchors, and nearby anchors that merge into one peak are the concrete failure mode. Detection of an unspecified family is outside the scope of this work. Natural next steps are an improved Stage 1, robustness sweeps over noise and occlusion, and a comparison with published lane detectors under their own metric. Code, configurations and the benchmark generator are released with the commands for every table.
+A deep Hough transform need not enumerate the full curve parameter space. If a curve family admits a spatial anchor, feature-space voting can be factorized into anchor localization followed by conditional shape voting, which reduces accumulator memory from $O(B^{d})$ to $O(B^{d_1}+kB^{d_2})$ and makes DHT-style voting memory-feasible for families beyond lines. With max pooling over probe shapes, the cascade scores $0.753\pm0.013$ on synthetic parabolas at twelve probes against $0.725\pm0.016$ for a tuned RANSAC fit, a modest margin over three seeds, is level with it on circles and slightly behind on ellipses at six probes (one seed), and needs 236\,KB of accumulator memory at $d=5$ where a dense accumulator would need about 4\,GB. Its remaining error sits in Stage 1: Stage 2 reaches F $=0.938$ at the ground-truth anchors, and nearby anchors that merge into one peak are the concrete failure mode. Detection of an unspecified family is outside the scope of this work. Natural next steps are an improved Stage 1, the validation-selected probe count confirmed on circles and ellipses over seeds, an occlusion test defined by removed curve fraction, and a comparison with published lane detectors under their own metric. Code, configurations and the benchmark generator are released with the commands for every table.
 
 \bibliographystyle{plainnat}
 \begin{thebibliography}{99}
