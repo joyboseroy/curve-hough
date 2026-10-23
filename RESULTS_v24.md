@@ -64,3 +64,20 @@ all runs; the old protocol was procedurally wrong but moved numbers little.
 Ablations under max pooling (topk, noise, occlusion, probes), baselines for
 circle and ellipse, multi-seed circle and ellipse, real dense d=4 comparison,
 multi-seed TuSimple with published baselines, a fix for close anchors.
+
+## TuSimple (v24 protocol, 3 seeds, 8 epochs, 128 px, random frame split 80/10/10)
+
+| method | test F (mean +/- std) | per seed |
+|---|---|---|
+| line: factorized DHT | 0.614 +/- 0.019 | 0.633, 0.589, 0.622 |
+| line: RANSAC tuned / untuned | 0.252 +/- 0.001 | 0.253, 0.251, 0.253 |
+| lane: factorized DHT (max) | 0.201 +/- 0.004 | 0.198, 0.207, 0.199 |
+| lane: factorized DHT (log-sumexp) | 0.177 +/- 0.012 | 0.187, 0.185, 0.160 |
+| lane: RANSAC tuned | 0.136 +/- 0.008 | 0.135, 0.127, 0.147 |
+| lane: RANSAC untuned | 0.134 +/- 0.006 | 0.138, 0.126, 0.140 |
+
+Lane anchor recall@4 (1 bin): max 0.147, log-sumexp 0.107. Lane threshold selected at the grid floor (0.05) in 2 of 3 seeds for max pooling.
+Caveats: split by frame not clip, generic Sobel RANSAC without road mask, two separate models, no published detectors.
+
+## Memory, matched grid
+Cascade ellipse shape set is 6^3 = 216 hypotheses (parabola, circle: 48), not 32 bins per shape axis. Dense at B=32 on every axis: 4 GB vs 236 KB (17,772x). Dense on the cascade's own grid (32x32 anchors x 216 shapes x C=32, float32): 27.0 MB, a like-for-like ratio of 117x (parabola: 6.00 MB vs 152 KB, 40.4x).

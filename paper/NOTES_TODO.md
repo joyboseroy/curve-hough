@@ -49,3 +49,6 @@ no published detectors). Still not done afterwards: published lane detectors und
 ## Update: 3-seed m=12 and 3-seed RANSAC (parabola)
 - m=12 cascade 0.753 +/- 0.013; m=6 0.696 +/- 0.011; RANSAC tuned 0.725 +/- 0.016; untuned 0.566 +/- 0.011. Paper updated (Table 2, abstract, limitations, conclusion).
 - Open: circle and ellipse over 3 seeds and with more probes; circle RANSAC seeds 0-2 pending.
+
+## Update: TuSimple done (3 seeds, v24 protocol)
+Paper Section 7 and Table 9 rewritten. Open: extend threshold grid below 0.05 for lanes, clip-level split, road-mask RANSAC baseline, published lane detectors, single model for both regimes, lane Stage-1 recall (0.15) improvement.

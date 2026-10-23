@@ -326,3 +326,6 @@ Response to review feedback. Changes:
 - All spatial families store params uniformly as (x0, y0, shape...); no
   per-family coordinate ordering exceptions, after v23 found out the hard
   way what that costs.
+
+
+Note (v24 paper): the 4 GB vs 236 KB comparison uses 32 bins on every dense axis, while the cascade uses a 216-hypothesis ellipse shape grid. On the cascade's own grid a dense accumulator is 27.0 MB, a like-for-like ratio of about 117x. Both are reported in the paper (Table 9).
